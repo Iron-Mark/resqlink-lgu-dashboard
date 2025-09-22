@@ -4,6 +4,7 @@ import Dashboard from "./components/Dashboard";
 import { BellIcon } from "@heroicons/react/24/outline";
 import { useNotifications } from "./context/NotificationContext";
 import AlertFeed from "./components/AlertFeed";
+import BottomNav from "./components/BottomNav";
 
 export default function App() {
   const isOnline = useOnlineStatus();
@@ -11,9 +12,10 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState(false);
 
   const unreadAlertsCount = getUnreadAlertCount();
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   return (
-    <div className="min-h-screen bg-ui-background font-sans">
+    <div className="min-h-screen bg-ui-background font-sans pb-24">
       <OfflineBanner />
       <header className="bg-ui-surface shadow-sm sticky top-0 z-10">
         <div className="max-w-md mx-auto p-4 flex justify-between items-center">
@@ -57,9 +59,10 @@ export default function App() {
           </div>
         </div>
       </header>
-      <main className="max-w-md mx-auto">
+      <main className="max-w-md mx-auto pb-16">
         <Dashboard />
       </main>
+      <BottomNav activeId={activeTab} onNavigate={setActiveTab} />
     </div>
   );
 }

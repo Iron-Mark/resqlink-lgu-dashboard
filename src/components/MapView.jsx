@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+﻿import { useState, useEffect, useMemo } from "react";
 import { MapPinIcon } from "@heroicons/react/24/solid";
 import {
   MapContainer,
@@ -37,6 +37,8 @@ L.Icon.Default.mergeOptions({
 const DEFAULT_CENTER = [14.676, 121.0437];
 const DEFAULT_ZOOM = 13;
 const SEVERITY_ORDER = { High: 0, Medium: 1, Low: 2 };
+const HAPTIC_SHORT = 18;
+const HAPTIC_TOGGLE = [12, 10, 16];
 
 function MapController({ center, zoom }) {
   const mapInstance = useMap();
@@ -59,7 +61,7 @@ const createIncidentIcon = (severity, isSelected = false) => {
     className: "custom-div-icon incident-marker",
     html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:${borderWidth}px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,0.3);transform:translate(-50%,-50%);position:relative;">
         <span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-45%);font-size:11px;font-weight:700;color:#fff;font-family:Inter,Arial,sans-serif;">${severity?.[0] ?? ""}</span>
-      </div>`,
+      </div>` ,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2],
@@ -78,7 +80,7 @@ const createResponderIcon = (status) => {
 
   return L.divIcon({
     className: "custom-div-icon responder-marker",
-    html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.25);"></div>`,
+    html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.25);"></div>` ,
     iconSize: [14, 14],
     iconAnchor: [7, 7],
     popupAnchor: [0, -6],
@@ -218,8 +220,14 @@ export default function MapView({
   const [showHazards, setShowHazards] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
+  const triggerHaptic = (pattern = HAPTIC_SHORT) => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(pattern);
+    }
+  };
+
   useEffect(() => {
-    const timer = setTimeout(() => setMapIsReady(true), 300);
+    const timer = setTimeout(() => setMapIsReady(true), 260);
     return () => clearTimeout(timer);
   }, []);
 
@@ -321,6 +329,7 @@ export default function MapView({
 
   const handleAssignResponder = (responder) => {
     if (!selectedIncident || !onAssign) return;
+    triggerHaptic(HAPTIC_TOGGLE);
     onAssign(selectedIncident.id, responder);
   };
 
@@ -337,64 +346,82 @@ export default function MapView({
   };
 
   const wrapperClassName = isFullScreen
-    ? "fixed inset-0 z-50 bg-ui-surface px-4 py-5 sm:px-6 flex flex-col"
-    : "bg-ui-surface p-4 rounded-xl shadow flex flex-col gap-4";
+    ? "fixed inset-0 z-50 flex flex-col overflow-hidden bg-ui-surface px-4 py-4 sm:px-6"
+    : "flex flex-col gap-4 rounded-xl bg-ui-surface p-4 shadow";
 
-  const mapContainerHeight = isFullScreen ? "100%" : "340px";
+  const containerClassName = isFullScreen
+    ? "relative flex-1 rounded-3xl border border-ui-border/50 bg-ui-background"
+    : "relative rounded-2xl border border-ui-border/60 bg-ui-background";
+
+  const mapHeight = isFullScreen ? "100%" : "min(60vh, 360px)";
+
+  const handleToggleHazards = () => {
+    triggerHaptic();
+    setShowHazards((prev) => !prev);
+  };
+
+  const handleToggleResponders = () => {
+    triggerHaptic();
+    setShowResponders((prev) => !prev);
+  };
+
+  const handleToggleAutoFocus = () => {
+    triggerHaptic();
+    setAutoFocus((prev) => !prev);
+  };
+
+  const handleToggleFullScreen = () => {
+    triggerHaptic(HAPTIC_TOGGLE);
+    setIsFullScreen((prev) => !prev);
+  };
 
   return (
     <div className={wrapperClassName}>
-      <div className={`flex flex-col gap-4 ${isFullScreen ? "h-full" : ""}`}>
+      <div className={`flex flex-col gap-4 ${isFullScreen ? "flex-1" : ""}`}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold text-ui-text">Focus Map</h2>
-              <span className="inline-flex items-center gap-1 rounded-full bg-brand-primary/10 px-2 py-0.5 text-xs font-medium text-brand-primary">
+              <h2 className="text-lg font-semibold text-ui-text">Focus Map</h2>
+              <span className="inline-flex items-center gap-1 rounded-full bg-brand-primary/10 px-2 py-0.5 text-[10px] font-medium text-brand-primary">
                 <Radar className="h-3 w-3" /> Live
               </span>
             </div>
-            <p className="mt-1 text-xs text-ui-subtext">
-              Mobile command view for on-ground teams.
-            </p>
+            <p className="mt-1 text-xs text-ui-subtext">Unified view for rapid decisions.</p>
           </div>
           <div className="flex items-center gap-2">
             <TogglePill
               active={showHazards}
               icon={Radar}
-              label="Hazards"
-              onClick={() => setShowHazards((prev) => !prev)}
+              label="Toggle hazard rings"
+              onClick={handleToggleHazards}
             />
             <TogglePill
               active={showResponders}
               icon={UsersIcon}
-              label="Responders"
-              onClick={() => setShowResponders((prev) => !prev)}
+              label="Toggle responders"
+              onClick={handleToggleResponders}
             />
             <TogglePill
               active={autoFocus}
               icon={Crosshair}
-              label="Auto focus"
-              onClick={() => setAutoFocus((prev) => !prev)}
+              label="Toggle auto focus"
+              onClick={handleToggleAutoFocus}
             />
             <button
               type="button"
-              onClick={() => setIsFullScreen((prev) => !prev)}
+              onClick={handleToggleFullScreen}
               className={`flex h-9 w-9 items-center justify-center rounded-full border border-ui-border bg-ui-background text-ui-text shadow-sm transition ${
-                isFullScreen ? "bg-brand-primary text-white border-brand-primary" : ""
+                isFullScreen ? "border-brand-primary bg-brand-primary text-white" : ""
               }`}
-              aria-label={isFullScreen ? "Exit full screen" : "Open full screen"}
+              aria-label={isFullScreen ? "Exit full screen map" : "Expand map"}
             >
-              {isFullScreen ? (
-                <Minimize2 className="h-4 w-4" />
-              ) : (
-                <Maximize2 className="h-4 w-4" />
-              )}
+              {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
           </div>
         </div>
 
         {!isFullScreen && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <FocusStat
               icon={AlertTriangle}
               iconClassName="text-status-high"
@@ -405,16 +432,16 @@ export default function MapView({
             <FocusStat
               icon={SignalHigh}
               iconClassName="text-brand-primary"
-              label="Citizen signals"
+              label="Signals"
               value={metrics.totalReports}
-              badge="30 min"
+              badge="Last 30 min"
             />
             <FocusStat
               icon={Activity}
               iconClassName="text-brand-secondary"
               label="AI hazard"
               value={formatHazardScore(metrics.averageHazard)}
-              badge="confidence"
+              badge="Confidence"
             />
             <FocusStat
               icon={UsersIcon}
@@ -426,15 +453,10 @@ export default function MapView({
           </div>
         )}
 
-        <div
-          className={`relative rounded-2xl overflow-hidden border border-ui-border/60 bg-ui-background ${
-            isFullScreen ? "flex-1" : ""
-          }`}
-          style={{ height: mapContainerHeight }}
-        >
+        <div className={containerClassName} style={{ height: mapHeight }}>
           {!mapIsReady ? (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-ui-background">
-              <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-brand-primary" />
+              <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-brand-primary" />
             </div>
           ) : (
             <MapContainer
@@ -536,8 +558,31 @@ export default function MapView({
             <LegendDot color="bg-red-500" label="High" />
             <LegendDot color="bg-orange-500" label="Medium" />
             <LegendDot color="bg-blue-500" label="Low" />
-            {showHazards && <LegendDot color="border border-brand-primary" label="Hazard" />}
+            {showHazards && (
+              <LegendDot color="bg-brand-primary/20 border border-brand-primary" label="Hazard" />
+            )}
           </div>
+
+          {isFullScreen && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-3">
+              <div className="pointer-events-auto max-h-[60vh] space-y-3 overflow-y-auto rounded-2xl bg-ui-surface/95 p-3 shadow-2xl backdrop-blur-md">
+                <FocusIncidentCard
+                  incident={selectedIncident}
+                  availableResponders={availableResponders}
+                  onAssign={handleAssignResponder}
+                  variant="sheet"
+                />
+                {sortedIncidents.length > 1 && (
+                  <IncidentQueue
+                    incidents={sortedIncidents}
+                    selectedId={selectedIncidentId}
+                    onSelect={focusIncidentFromList}
+                    variant="sheet"
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {!isFullScreen && (
@@ -581,9 +626,16 @@ function TogglePill({ active, icon: Icon, label, onClick }) {
 }
 
 function LegendDot({ color, label }) {
+  const outline = color.includes("border");
   return (
     <span className="flex items-center gap-1">
-      <span className={`inline-block h-2.5 w-2.5 rounded-full ${color}`} />
+      <span
+        className={`inline-flex h-2.5 w-2.5 items-center justify-center rounded-full ${
+          outline ? color : `${color}`
+        }`}
+      >
+        {outline && <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" />}
+      </span>
       {label}
     </span>
   );
@@ -597,32 +649,37 @@ function FocusStat({ icon: Icon, iconClassName = "", label, value, badge }) {
       >
         <Icon className="h-4 w-4" />
       </span>
-      <div className="flex flex-col">
-        <span className="text-xs uppercase tracking-wide text-ui-subtext">{label}</span>
-        <span className="text-base font-semibold text-ui-text">{value}</span>
+      <div className="flex flex-col leading-tight">
+        <span className="text-[10px] uppercase tracking-wide text-ui-subtext">{label}</span>
+        <span className="text-sm font-semibold text-ui-text">{value}</span>
         <span className="text-[10px] font-medium text-ui-subtext/80">{badge}</span>
       </div>
     </div>
   );
 }
 
-function FocusIncidentCard({ incident, availableResponders, onAssign }) {
+function FocusIncidentCard({ incident, availableResponders, onAssign, variant = "default" }) {
+  const baseClass =
+    variant === "sheet"
+      ? "space-y-3 rounded-2xl border border-ui-border/60 bg-ui-surface/95 p-3 shadow-md"
+      : "space-y-4 rounded-2xl border border-ui-border bg-ui-background p-4";
+
   if (!incident) {
     return (
-      <div className="rounded-2xl border border-ui-border bg-ui-background p-4 text-center text-sm text-ui-subtext">
+      <div className={baseClass + " text-center text-sm text-ui-subtext"}>
         All clear. No active incidents selected.
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 rounded-2xl border border-ui-border bg-ui-background p-4">
+    <div className={baseClass}>
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-lg font-semibold text-ui-text">{incident.type}</div>
-          <div className="flex items-center gap-1 text-xs text-ui-subtext">
+        <div className="min-w-0">
+          <div className="truncate text-base font-semibold text-ui-text">{incident.type}</div>
+          <div className="mt-1 flex items-center gap-1 text-xs text-ui-subtext">
             <MapPinIcon className="h-4 w-4 text-brand-primary" />
-            {incident.location}
+            <span className="truncate">{incident.location}</span>
           </div>
         </div>
         <span className="rounded-full bg-brand-primary/10 px-3 py-1 text-xs font-semibold text-brand-primary">
@@ -631,22 +688,14 @@ function FocusIncidentCard({ incident, availableResponders, onAssign }) {
       </div>
 
       <div className="grid grid-cols-3 gap-2 text-center text-xs font-medium">
-        <MiniBadge
-          icon={SignalHigh}
-          value={`${incident.citizenReports}`}
-          label="Reports"
-        />
+        <MiniBadge icon={SignalHigh} value={`${incident.citizenReports}`} label="Reports" />
         <MiniBadge
           icon={Activity}
           value={formatHazardScore(incident.aiHazardScore)}
           label={`${incident.riskBand} risk`}
           accent={getRiskColor(incident.riskBand)}
         />
-        <MiniBadge
-          icon={Target}
-          value={`${incident.impactRadiusKm.toFixed(1)} km`}
-          label="Radius"
-        />
+        <MiniBadge icon={Target} value={`${incident.impactRadiusKm.toFixed(1)} km`} label="Radius" />
       </div>
 
       {incident.aiSummary && (
@@ -663,20 +712,18 @@ function FocusIncidentCard({ incident, availableResponders, onAssign }) {
 
       {availableResponders.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ui-subtext">
-            Nearby Teams
-          </p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-ui-subtext">Nearby teams</p>
           <div className="space-y-2">
             {availableResponders.slice(0, 4).map((responder) => (
               <div
                 key={responder.id}
                 className="flex items-center justify-between gap-3 rounded-xl border border-ui-border bg-white/80 px-3 py-2"
               >
-                <div>
-                  <p className="text-sm font-semibold text-ui-text">{responder.name}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-ui-text">{responder.name}</p>
                   <p className="text-xs text-ui-subtext">
-                    {responder.status} - {formatDistanceKm(responder.distanceKm)}
-                    {responder.etaMinutes != null && ` - ${responder.etaMinutes} min`}
+                    {responder.status} · {formatDistanceKm(responder.distanceKm)}
+                    {responder.etaMinutes != null && ` · ${responder.etaMinutes} min`}
                   </p>
                 </div>
                 <button
@@ -707,17 +754,20 @@ function MiniBadge({ icon: Icon, value, label, accent }) {
         <Icon className="h-4 w-4" />
       </span>
       <span className="text-sm font-semibold text-ui-text">{value}</span>
-      <span className="text-[10px] uppercase tracking-wide text-ui-subtext">
-        {label}
-      </span>
+      <span className="text-[10px] uppercase tracking-wide text-ui-subtext">{label}</span>
     </div>
   );
 }
 
-function IncidentQueue({ incidents, selectedId, onSelect }) {
+function IncidentQueue({ incidents, selectedId, onSelect, variant = "default" }) {
+  const baseClass =
+    variant === "sheet"
+      ? "space-y-2 rounded-2xl border border-ui-border/60 bg-ui-surface/95 p-3 shadow-md"
+      : "space-y-2 rounded-2xl border border-ui-border bg-ui-background p-4";
+
   return (
-    <div className="rounded-2xl border border-ui-border bg-ui-background p-4">
-      <div className="mb-3 flex items-center justify-between text-xs text-ui-subtext">
+    <div className={baseClass}>
+      <div className="mb-2 flex items-center justify-between text-xs text-ui-subtext">
         <span className="font-semibold uppercase tracking-wide">Queue</span>
         <span>{incidents.length} active</span>
       </div>
@@ -734,11 +784,11 @@ function IncidentQueue({ incidents, selectedId, onSelect }) {
             }`}
           >
             <div className="flex items-center justify-between text-sm font-semibold">
-              <span>{incident.type}</span>
+              <span className="truncate">{incident.type}</span>
               <span className="text-xs text-ui-subtext">{incident.time}</span>
             </div>
             <div className="flex items-center justify-between text-[11px] text-ui-subtext">
-              <span>{incident.location}</span>
+              <span className="truncate">{incident.location}</span>
               <span>{incident.citizenReports} reports</span>
             </div>
           </button>

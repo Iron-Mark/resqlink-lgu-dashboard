@@ -29,7 +29,6 @@ Thumbs.db
 !.env.example
 
 # Vite specific
-vite.svg
 .vite/
 
 # TypeScript
