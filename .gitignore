@@ -1,0 +1,78 @@
+### Node / Vite / React ###
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+.cache/
+.parcel-cache/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Vite specific
+vite.svg
+.vite/
+
+# TypeScript
+*.tsbuildinfo
+
+# Coverage
+coverage/
+
+# Misc caches
+.eslintcache
+.stylelintcache
+.cache-loader
+
+# Local dev
+.local/
+.tmp/
+tmp/
+
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+
+# Avoid accidental upload of the Sketch and Figma design files
+#####################################################
+## Please do not remove lines 5 and 6 - thanks! 🙂 ##
+#####################################################
+*.sketch
+*.fig
+
+# Avoid accidental XD upload if you convert the design file
+###############################################
+## Please do not remove line 12 - thanks! 🙂 ##
+###############################################
+*.xd
+
+# Avoid your project being littered with annoying .DS_Store files!
+.DS_Store
+.prettierignore

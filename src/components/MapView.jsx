@@ -1,0 +1,749 @@
+import { useState, useEffect, useMemo } from "react";
+import { MapPinIcon } from "@heroicons/react/24/solid";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  ZoomControl,
+  useMap,
+  Circle,
+  Tooltip,
+} from "react-leaflet";
+import L from "leaflet";
+import {
+  Maximize2,
+  Minimize2,
+  Radar,
+  Users as UsersIcon,
+  Crosshair,
+  Activity,
+  AlertTriangle,
+  SignalHigh,
+  Target,
+} from "lucide-react";
+import "leaflet/dist/leaflet.css";
+import "./MapView.css";
+
+// Fix for default marker icons in Leaflet with Vite/webpack
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+const DEFAULT_CENTER = [14.676, 121.0437];
+const DEFAULT_ZOOM = 13;
+const SEVERITY_ORDER = { High: 0, Medium: 1, Low: 2 };
+
+function MapController({ center, zoom }) {
+  const mapInstance = useMap();
+
+  useEffect(() => {
+    if (mapInstance && center) {
+      mapInstance.setView(center, zoom);
+    }
+  }, [mapInstance, center, zoom]);
+
+  return null;
+}
+
+const createIncidentIcon = (severity, isSelected = false) => {
+  const color = getSeverityColor(severity);
+  const size = isSelected ? 34 : 28;
+  const borderWidth = isSelected ? 3 : 2;
+
+  return L.divIcon({
+    className: "custom-div-icon incident-marker",
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:${borderWidth}px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,0.3);transform:translate(-50%,-50%);position:relative;">
+        <span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-45%);font-size:11px;font-weight:700;color:#fff;font-family:Inter,Arial,sans-serif;">${severity?.[0] ?? ""}</span>
+      </div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
+  });
+};
+
+const createResponderIcon = (status) => {
+  const color =
+    status === "Available"
+      ? "#34D399"
+      : status === "On Scene"
+      ? "#3B82F6"
+      : status === "En Route"
+      ? "#F59E0B"
+      : "#9CA3AF";
+
+  return L.divIcon({
+    className: "custom-div-icon responder-marker",
+    html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.25);"></div>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+    popupAnchor: [0, -6],
+  });
+};
+
+function getSeverityColor(severity) {
+  switch (severity) {
+    case "High":
+      return "#F43F5E";
+    case "Medium":
+      return "#F97316";
+    case "Low":
+      return "#3B82F6";
+    default:
+      return "#6B7280";
+  }
+}
+
+function getRiskColor(riskBand) {
+  switch (riskBand) {
+    case "Red":
+      return "#F43F5E";
+    case "Amber":
+      return "#F97316";
+    case "Blue":
+      return "#3B82F6";
+    default:
+      return "#0EA5E9";
+  }
+}
+
+const EARTH_RADIUS_KM = 6371;
+const toRad = (value) => (value * Math.PI) / 180;
+
+function calculateDistanceKm(source, target) {
+  if (!source || !target) return null;
+  const { lat: lat1, lng: lng1 } = source;
+  const { lat: lat2, lng: lng2 } = target;
+  if (
+    typeof lat1 !== "number" ||
+    typeof lng1 !== "number" ||
+    typeof lat2 !== "number" ||
+    typeof lng2 !== "number"
+  ) {
+    return null;
+  }
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return EARTH_RADIUS_KM * c;
+}
+
+const formatHazardScore = (value) =>
+  `${Math.round(Math.min(Math.max(value ?? 0, 0), 1) * 100)}%`;
+
+const formatDistanceKm = (value) =>
+  value == null ? "--" : `${value.toFixed(1)} km`;
+
+export default function MapView({
+  activeIncidents = [],
+  onIncidentSelect,
+  responders = [],
+  onAssign,
+}) {
+  const incidents = useMemo(
+    () =>
+      activeIncidents.map((incident) => {
+        const coordinates = incident.coordinates || {};
+        const lat =
+          typeof coordinates.lat === "number"
+            ? coordinates.lat
+            : Number(coordinates.lat);
+        const lng =
+          typeof coordinates.lng === "number"
+            ? coordinates.lng
+            : Number(coordinates.lng);
+
+        return {
+          ...incident,
+          lat: Number.isFinite(lat) ? lat : DEFAULT_CENTER[0],
+          lng: Number.isFinite(lng) ? lng : DEFAULT_CENTER[1],
+          citizenReports: incident.citizenReports ?? 0,
+          aiHazardScore: incident.aiHazardScore ?? 0,
+          impactRadiusKm: incident.impactRadiusKm ?? 0.8,
+          riskBand: incident.riskBand ?? "Amber",
+          status: incident.status ?? "Awaiting Dispatch",
+          reportSources: incident.reportSources ?? [],
+        };
+      }),
+    [activeIncidents]
+  );
+
+  const sortedIncidents = useMemo(() => {
+    return [...incidents].sort((a, b) => {
+      const severityCompare =
+        (SEVERITY_ORDER[a.severity] ?? 99) -
+        (SEVERITY_ORDER[b.severity] ?? 99);
+      if (severityCompare !== 0) return severityCompare;
+      return (b.citizenReports ?? 0) - (a.citizenReports ?? 0);
+    });
+  }, [incidents]);
+
+  const [selectedIncidentId, setSelectedIncidentId] = useState(() =>
+    incidents.length ? incidents[0].id : null
+  );
+
+  useEffect(() => {
+    if (!incidents.length) {
+      setSelectedIncidentId(null);
+      return;
+    }
+    setSelectedIncidentId((current) => {
+      if (current && incidents.some((inc) => inc.id === current)) {
+        return current;
+      }
+      return incidents[0].id;
+    });
+  }, [incidents]);
+
+  const selectedIncident = useMemo(
+    () => incidents.find((inc) => inc.id === selectedIncidentId) ?? null,
+    [incidents, selectedIncidentId]
+  );
+
+  const [autoFocus, setAutoFocus] = useState(true);
+  const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
+  const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
+  const [mapIsReady, setMapIsReady] = useState(false);
+  const [showResponders, setShowResponders] = useState(true);
+  const [showHazards, setShowHazards] = useState(true);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMapIsReady(true), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedIncident || !autoFocus) return;
+    setMapCenter([selectedIncident.lat, selectedIncident.lng]);
+    setMapZoom((prev) => Math.max(prev, 13));
+  }, [selectedIncident, autoFocus]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (isFullScreen) {
+      const original = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = original;
+      };
+    }
+    return undefined;
+  }, [isFullScreen]);
+
+  const responderMarkers = useMemo(
+    () =>
+      responders
+        .map((responder) => {
+          const coordinates = responder.coordinates || {};
+          const lat =
+            typeof coordinates.lat === "number"
+              ? coordinates.lat
+              : Number(coordinates.lat);
+          const lng =
+            typeof coordinates.lng === "number"
+              ? coordinates.lng
+              : Number(coordinates.lng);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return null;
+          }
+          return {
+            ...responder,
+            lat,
+            lng,
+          };
+        })
+        .filter(Boolean),
+    [responders]
+  );
+
+  const metrics = useMemo(() => {
+    const totalReports = incidents.reduce(
+      (acc, incident) => acc + (incident.citizenReports ?? 0),
+      0
+    );
+    const highSeverity = incidents.filter(
+      (incident) => incident.severity === "High"
+    ).length;
+    const averageHazard = incidents.length
+      ? incidents.reduce(
+          (acc, incident) => acc + (incident.aiHazardScore ?? 0),
+          0
+        ) / incidents.length
+      : 0;
+    const deployedTeams = responders.filter((responder) =>
+      ["En Route", "On Scene"].includes(responder.status)
+    ).length;
+
+    return {
+      totalReports,
+      highSeverity,
+      averageHazard,
+      deployedTeams,
+    };
+  }, [incidents, responders]);
+
+  const availableResponders = useMemo(() => {
+    if (!selectedIncident) return [];
+    return responderMarkers
+      .filter((responder) => responder.status !== "Off Duty")
+      .map((responder) => ({
+        ...responder,
+        distanceKm: calculateDistanceKm(
+          { lat: responder.lat, lng: responder.lng },
+          {
+            lat: selectedIncident.lat,
+            lng: selectedIncident.lng,
+          }
+        ),
+      }))
+      .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+  }, [responderMarkers, selectedIncident]);
+
+  const handleIncidentClick = (incidentId) => {
+    const incident = incidents.find((inc) => inc.id === incidentId);
+    if (!incident) return;
+    setSelectedIncidentId(incidentId);
+    if (onIncidentSelect) {
+      onIncidentSelect(incident);
+    }
+  };
+
+  const handleAssignResponder = (responder) => {
+    if (!selectedIncident || !onAssign) return;
+    onAssign(selectedIncident.id, responder);
+  };
+
+  const focusIncidentFromList = (incidentId) => {
+    const incident = incidents.find((inc) => inc.id === incidentId);
+    if (!incident) return;
+    setSelectedIncidentId(incidentId);
+    if (onIncidentSelect) {
+      onIncidentSelect(incident);
+    }
+    if (autoFocus) {
+      setMapCenter([incident.lat, incident.lng]);
+    }
+  };
+
+  const wrapperClassName = isFullScreen
+    ? "fixed inset-0 z-50 bg-ui-surface px-4 py-5 sm:px-6 flex flex-col"
+    : "bg-ui-surface p-4 rounded-xl shadow flex flex-col gap-4";
+
+  const mapContainerHeight = isFullScreen ? "100%" : "340px";
+
+  return (
+    <div className={wrapperClassName}>
+      <div className={`flex flex-col gap-4 ${isFullScreen ? "h-full" : ""}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-semibold text-ui-text">Focus Map</h2>
+              <span className="inline-flex items-center gap-1 rounded-full bg-brand-primary/10 px-2 py-0.5 text-xs font-medium text-brand-primary">
+                <Radar className="h-3 w-3" /> Live
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-ui-subtext">
+              Mobile command view for on-ground teams.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <TogglePill
+              active={showHazards}
+              icon={Radar}
+              label="Hazards"
+              onClick={() => setShowHazards((prev) => !prev)}
+            />
+            <TogglePill
+              active={showResponders}
+              icon={UsersIcon}
+              label="Responders"
+              onClick={() => setShowResponders((prev) => !prev)}
+            />
+            <TogglePill
+              active={autoFocus}
+              icon={Crosshair}
+              label="Auto focus"
+              onClick={() => setAutoFocus((prev) => !prev)}
+            />
+            <button
+              type="button"
+              onClick={() => setIsFullScreen((prev) => !prev)}
+              className={`flex h-9 w-9 items-center justify-center rounded-full border border-ui-border bg-ui-background text-ui-text shadow-sm transition ${
+                isFullScreen ? "bg-brand-primary text-white border-brand-primary" : ""
+              }`}
+              aria-label={isFullScreen ? "Exit full screen" : "Open full screen"}
+            >
+              {isFullScreen ? (
+                <Minimize2 className="h-4 w-4" />
+              ) : (
+                <Maximize2 className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {!isFullScreen && (
+          <div className="grid grid-cols-2 gap-3">
+            <FocusStat
+              icon={AlertTriangle}
+              iconClassName="text-status-high"
+              label="Incidents"
+              value={incidents.length}
+              badge={`${metrics.highSeverity} high`}
+            />
+            <FocusStat
+              icon={SignalHigh}
+              iconClassName="text-brand-primary"
+              label="Citizen signals"
+              value={metrics.totalReports}
+              badge="30 min"
+            />
+            <FocusStat
+              icon={Activity}
+              iconClassName="text-brand-secondary"
+              label="AI hazard"
+              value={formatHazardScore(metrics.averageHazard)}
+              badge="confidence"
+            />
+            <FocusStat
+              icon={UsersIcon}
+              iconClassName="text-status-medium"
+              label="Teams"
+              value={metrics.deployedTeams}
+              badge={`${responders.length} total`}
+            />
+          </div>
+        )}
+
+        <div
+          className={`relative rounded-2xl overflow-hidden border border-ui-border/60 bg-ui-background ${
+            isFullScreen ? "flex-1" : ""
+          }`}
+          style={{ height: mapContainerHeight }}
+        >
+          {!mapIsReady ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-ui-background">
+              <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-brand-primary" />
+            </div>
+          ) : (
+            <MapContainer
+              center={mapCenter}
+              zoom={mapZoom}
+              className="h-full w-full"
+              scrollWheelZoom
+              zoomControl={false}
+              doubleClickZoom
+              dragging
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+
+              <MapController center={mapCenter} zoom={mapZoom} />
+              <ZoomControl position="topright" />
+
+              {showHazards &&
+                incidents.map((incident) => (
+                  <Circle
+                    key={`${incident.id}-hazard`}
+                    center={[incident.lat, incident.lng]}
+                    radius={(incident.impactRadiusKm ?? 0.6) * 1000}
+                    pathOptions={{
+                      color: getSeverityColor(incident.severity),
+                      fillColor: getSeverityColor(incident.severity),
+                      fillOpacity: 0.1,
+                      weight: incident.id === selectedIncidentId ? 2 : 1,
+                    }}
+                  />
+                ))}
+
+              {incidents.map((incident) => (
+                <Marker
+                  key={incident.id}
+                  position={[incident.lat, incident.lng]}
+                  icon={createIncidentIcon(
+                    incident.severity,
+                    incident.id === selectedIncidentId
+                  )}
+                  eventHandlers={{
+                    click: () => handleIncidentClick(incident.id),
+                  }}
+                >
+                  <Tooltip direction="top" offset={[0, -8]}>
+                    <div className="text-xs font-semibold text-ui-text">
+                      {incident.type}
+                    </div>
+                    <div className="text-[10px] text-ui-subtext">
+                      {incident.citizenReports} citizen reports
+                    </div>
+                  </Tooltip>
+                  <Popup className="incident-popup" closeButton={false}>
+                    <div className="space-y-1 text-sm">
+                      <div className="font-semibold text-ui-text">
+                        {incident.type}
+                      </div>
+                      <div className="text-xs text-ui-subtext">
+                        {incident.location}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          focusIncidentFromList(incident.id);
+                        }}
+                        className="mt-2 w-full rounded-lg bg-brand-primary px-2 py-1 text-xs font-semibold text-white"
+                      >
+                        Focus mission
+                      </button>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+
+              {showResponders &&
+                responderMarkers.map((responder) => (
+                  <Marker
+                    key={responder.id}
+                    position={[responder.lat, responder.lng]}
+                    icon={createResponderIcon(responder.status)}
+                  >
+                    <Tooltip direction="top" offset={[0, -4]}>
+                      <div className="text-xs font-semibold text-ui-text">
+                        {responder.name}
+                      </div>
+                      <div className="text-[10px] text-ui-subtext">
+                        {responder.status}
+                      </div>
+                    </Tooltip>
+                  </Marker>
+                ))}
+            </MapContainer>
+          )}
+
+          <div className="pointer-events-none absolute bottom-3 right-3 flex flex-col items-end gap-2 text-[10px] font-medium text-ui-subtext/90">
+            <LegendDot color="bg-red-500" label="High" />
+            <LegendDot color="bg-orange-500" label="Medium" />
+            <LegendDot color="bg-blue-500" label="Low" />
+            {showHazards && <LegendDot color="border border-brand-primary" label="Hazard" />}
+          </div>
+        </div>
+
+        {!isFullScreen && (
+          <div className="space-y-4">
+            <FocusIncidentCard
+              incident={selectedIncident}
+              availableResponders={availableResponders}
+              onAssign={handleAssignResponder}
+            />
+
+            {sortedIncidents.length > 1 && (
+              <IncidentQueue
+                incidents={sortedIncidents}
+                selectedId={selectedIncidentId}
+                onSelect={focusIncidentFromList}
+              />
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TogglePill({ active, icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm transition ${
+        active
+          ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
+          : "border-ui-border bg-ui-background text-ui-subtext"
+      }`}
+      aria-pressed={active}
+      aria-label={label}
+    >
+      <Icon className="h-4 w-4" />
+    </button>
+  );
+}
+
+function LegendDot({ color, label }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span className={`inline-block h-2.5 w-2.5 rounded-full ${color}`} />
+      {label}
+    </span>
+  );
+}
+
+function FocusStat({ icon: Icon, iconClassName = "", label, value, badge }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-ui-border bg-ui-background px-3 py-2">
+      <span
+        className={`flex h-9 w-9 items-center justify-center rounded-lg bg-ui-border/40 ${iconClassName}`}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="flex flex-col">
+        <span className="text-xs uppercase tracking-wide text-ui-subtext">{label}</span>
+        <span className="text-base font-semibold text-ui-text">{value}</span>
+        <span className="text-[10px] font-medium text-ui-subtext/80">{badge}</span>
+      </div>
+    </div>
+  );
+}
+
+function FocusIncidentCard({ incident, availableResponders, onAssign }) {
+  if (!incident) {
+    return (
+      <div className="rounded-2xl border border-ui-border bg-ui-background p-4 text-center text-sm text-ui-subtext">
+        All clear. No active incidents selected.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-ui-border bg-ui-background p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-lg font-semibold text-ui-text">{incident.type}</div>
+          <div className="flex items-center gap-1 text-xs text-ui-subtext">
+            <MapPinIcon className="h-4 w-4 text-brand-primary" />
+            {incident.location}
+          </div>
+        </div>
+        <span className="rounded-full bg-brand-primary/10 px-3 py-1 text-xs font-semibold text-brand-primary">
+          {incident.status}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 text-center text-xs font-medium">
+        <MiniBadge
+          icon={SignalHigh}
+          value={`${incident.citizenReports}`}
+          label="Reports"
+        />
+        <MiniBadge
+          icon={Activity}
+          value={formatHazardScore(incident.aiHazardScore)}
+          label={`${incident.riskBand} risk`}
+          accent={getRiskColor(incident.riskBand)}
+        />
+        <MiniBadge
+          icon={Target}
+          value={`${incident.impactRadiusKm.toFixed(1)} km`}
+          label="Radius"
+        />
+      </div>
+
+      {incident.aiSummary && (
+        <div className="rounded-xl bg-ui-surface p-3 text-sm text-ui-text/90">
+          {incident.aiSummary}
+        </div>
+      )}
+
+      {incident.recommendedAction && (
+        <div className="rounded-xl border border-ui-border/60 bg-ui-surface/80 p-3 text-sm text-ui-text/90">
+          {incident.recommendedAction}
+        </div>
+      )}
+
+      {availableResponders.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ui-subtext">
+            Nearby Teams
+          </p>
+          <div className="space-y-2">
+            {availableResponders.slice(0, 4).map((responder) => (
+              <div
+                key={responder.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-ui-border bg-white/80 px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-ui-text">{responder.name}</p>
+                  <p className="text-xs text-ui-subtext">
+                    {responder.status} - {formatDistanceKm(responder.distanceKm)}
+                    {responder.etaMinutes != null && ` - ${responder.etaMinutes} min`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onAssign(responder)}
+                  className="rounded-full bg-brand-primary px-3 py-1 text-xs font-semibold text-white shadow"
+                >
+                  Assign
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiniBadge({ icon: Icon, value, label, accent }) {
+  return (
+    <div className="flex flex-col items-center gap-1 rounded-xl border border-ui-border bg-white/80 px-2 py-2">
+      <span
+        className={`flex h-7 w-7 items-center justify-center rounded-full ${
+          accent ? "text-white" : "text-brand-primary"
+        }`}
+        style={accent ? { backgroundColor: accent } : undefined}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="text-sm font-semibold text-ui-text">{value}</span>
+      <span className="text-[10px] uppercase tracking-wide text-ui-subtext">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function IncidentQueue({ incidents, selectedId, onSelect }) {
+  return (
+    <div className="rounded-2xl border border-ui-border bg-ui-background p-4">
+      <div className="mb-3 flex items-center justify-between text-xs text-ui-subtext">
+        <span className="font-semibold uppercase tracking-wide">Queue</span>
+        <span>{incidents.length} active</span>
+      </div>
+      <div className="space-y-2">
+        {incidents.slice(0, 6).map((incident) => (
+          <button
+            key={incident.id}
+            type="button"
+            onClick={() => onSelect(incident.id)}
+            className={`w-full rounded-xl border px-3 py-2 text-left shadow-sm transition ${
+              incident.id === selectedId
+                ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
+                : "border-ui-border bg-white/90 text-ui-text"
+            }`}
+          >
+            <div className="flex items-center justify-between text-sm font-semibold">
+              <span>{incident.type}</span>
+              <span className="text-xs text-ui-subtext">{incident.time}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-ui-subtext">
+              <span>{incident.location}</span>
+              <span>{incident.citizenReports} reports</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
