@@ -187,17 +187,42 @@ const CreateManualIncident = ({ onClose, onAddIncident }) => {
     }
 
     const severityDefaults = {
-      High: { status: "Awaiting Dispatch", reports: 12, hazard: 0.82, riskBand: "Red", impact: 1.0 },
-      Medium: { status: "Awaiting Dispatch", reports: 7, hazard: 0.55, riskBand: "Amber", impact: 0.7 },
-      Low: { status: "Awaiting Dispatch", reports: 3, hazard: 0.32, riskBand: "Blue", impact: 0.4 },
+      High: {
+        status: "Awaiting Dispatch",
+        reports: 12,
+        hazard: 0.82,
+        riskBand: "Red",
+        impact: 1.0,
+      },
+      Medium: {
+        status: "Awaiting Dispatch",
+        reports: 7,
+        hazard: 0.55,
+        riskBand: "Amber",
+        impact: 0.7,
+      },
+      Low: {
+        status: "Awaiting Dispatch",
+        reports: 3,
+        hazard: 0.32,
+        riskBand: "Blue",
+        impact: 0.4,
+      },
     };
     const defaults = severityDefaults[severity] || severityDefaults.Medium;
 
-    const coordinateMatch = trimmedLocation.match(/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/);
+    const coordinateMatch = trimmedLocation.match(
+      /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/
+    );
     let coordinates;
     if (coordinateMatch) {
-      const parts = trimmedLocation.split(",").map((part) => parseFloat(part.trim()));
-      if (parts.length === 2 && parts.every((value) => Number.isFinite(value))) {
+      const parts = trimmedLocation
+        .split(",")
+        .map((part) => parseFloat(part.trim()));
+      if (
+        parts.length === 2 &&
+        parts.every((value) => Number.isFinite(value))
+      ) {
         coordinates = { lat: parts[0], lng: parts[1] };
       }
     }
@@ -232,7 +257,9 @@ const CreateManualIncident = ({ onClose, onAddIncident }) => {
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-ui-surface w-full max-w-sm rounded-2xl shadow-2xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-ui-text">Create Manual Incident</h3>
+          <h3 className="text-xl font-bold text-ui-text">
+            Create Manual Incident
+          </h3>
           <button
             onClick={onClose}
             className="p-2 rounded-full text-ui-subtext hover:text-ui-text hover:bg-ui-background"
@@ -338,7 +365,7 @@ export default function QuickActions({
 
   return (
     <>
-      <div className="fixed bottom-6 right-6 sm:bottom-10 sm:right-10 flex flex-col items-end gap-3 z-40">
+      <div className="fixed bottom-28 right-6 sm:bottom-10 sm:right-10 flex flex-col items-end gap-3 z-40">
         {showMenu && (
           <div className="flex flex-col items-end gap-3">
             <ActionButton

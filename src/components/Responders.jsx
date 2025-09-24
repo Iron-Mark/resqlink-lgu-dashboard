@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
-import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
+﻿import { useState, useEffect, useMemo } from "react";
+import { XCircleIcon } from "@heroicons/react/24/outline";
 import { UserIcon, UserGroupIcon } from "@heroicons/react/24/solid";
 
-// Mock responder data
-const mockResponders = [
+export const defaultResponders = [
   {
     id: "R-001",
     name: "Team Alpha",
@@ -12,24 +11,36 @@ const mockResponders = [
     location: "Brgy. Malanday",
     lastActive: "2m ago",
     specialization: ["Flood", "Medical"],
+    agency: "Rescue",
+    certifications: ["Swift Water", "First Responder"],
+    dutyHistory: ["INC-045 Flood Evacuation", "INC-038 Search Ops"],
+    lastCheckIn: "Just now",
   },
   {
     id: "R-002",
     name: "Team Bravo",
-    status: "En Route",
+    status: "On Scene",
     members: 4,
     location: "Brgy. Concepcion",
     lastActive: "5m ago",
     specialization: ["Fire", "Technical Rescue"],
+    agency: "BFP",
+    certifications: ["HazMat", "Breaching"],
+    dutyHistory: ["INC-042 Market Fire", "INC-031 Chemical Leak"],
+    lastCheckIn: "3m ago",
   },
   {
     id: "R-003",
     name: "Team Charlie",
-    status: "On Scene",
+    status: "En Route",
     members: 2,
-    location: "Brgy. Sto. Niño",
+    location: "Brgy. Sto. Nino",
     lastActive: "10m ago",
     specialization: ["Medical", "Evacuation"],
+    agency: "EMS",
+    certifications: ["Paramedic", "Triage Officer"],
+    dutyHistory: ["INC-050 Landslide", "INC-035 Heat Stress"],
+    lastCheckIn: "7m ago",
   },
   {
     id: "R-004",
@@ -39,6 +50,10 @@ const mockResponders = [
     location: "Brgy. Bayan",
     lastActive: "15m ago",
     specialization: ["Search & Rescue", "Medical"],
+    agency: "Rescue",
+    certifications: ["Rope Rescue", "First Aid"],
+    dutyHistory: ["INC-041 Missing Person"],
+    lastCheckIn: "10m ago",
   },
   {
     id: "R-005",
@@ -48,15 +63,55 @@ const mockResponders = [
     location: "Brgy. San Roque",
     lastActive: "1h ago",
     specialization: ["Fire", "Earthquake Response"],
+    agency: "Volunteer Corps",
+    certifications: ["Fire Suppression", "USAR"],
+    dutyHistory: ["INC-037 Warehouse Fire"],
+    lastCheckIn: "45m ago",
   },
 ];
 
-export default function Responders({
-  responders: externalResponders,
-  onStatusChange,
-}) {
+const STATUS_CATEGORY = {
+  Available: "Available",
+  Standby: "Available",
+  "En Route": "On Mission",
+  "On Scene": "On Mission",
+  "On Mission": "On Mission",
+  Assigned: "On Mission",
+  "Off Duty": "Unavailable",
+  Unavailable: "Unavailable",
+};
+
+const SUMMARY_TEMPLATE = [
+  { key: "Available", label: "Available", color: "bg-status-resolved", text: "text-status-resolved" },
+  { key: "On Mission", label: "On Mission", color: "bg-status-medium", text: "text-status-medium" },
+  { key: "Unavailable", label: "Unavailable", color: "bg-slate-400", text: "text-ui-subtext" },
+];
+
+const statusTextClass = (status) => {
+  switch (STATUS_CATEGORY[status] ?? status) {
+    case "Available":
+      return "text-status-resolved";
+    case "On Mission":
+      return "text-status-medium";
+    default:
+      return "text-ui-subtext";
+  }
+};
+
+const statusChipClass = (status) => {
+  switch (STATUS_CATEGORY[status] ?? status) {
+    case "Available":
+      return "bg-status-resolved/10 text-status-resolved";
+    case "On Mission":
+      return "bg-status-medium/10 text-status-medium";
+    default:
+      return "bg-slate-100 text-ui-subtext";
+  }
+};
+
+export default function Responders({ responders: externalResponders, onStatusChange }) {
   const [localResponders, setLocalResponders] = useState(
-    externalResponders ?? mockResponders
+    externalResponders ?? defaultResponders
   );
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedResponder, setSelectedResponder] = useState(null);
@@ -71,25 +126,41 @@ export default function Responders({
 
   useEffect(() => {
     if (!selectedResponder) return;
-    const updated = responders.find((r) => r.id === selectedResponder.id);
+    const updated = responders.find((responder) => responder.id === selectedResponder.id);
     if (updated && updated !== selectedResponder) {
       setSelectedResponder(updated);
     }
   }, [responders, selectedResponder]);
 
-  const filteredResponders = responders.filter(
-    (r) => statusFilter === "All" || r.status === statusFilter
+  const summaryCards = useMemo(
+    () =>
+      SUMMARY_TEMPLATE.map((card) => ({
+        ...card,
+        count: responders.filter(
+          (responder) => (STATUS_CATEGORY[responder.status] ?? responder.status) === card.key
+        ).length,
+      })),
+    [responders]
+  );
+
+  const statusOptions = useMemo(() => {
+    const unique = Array.from(new Set(responders.map((responder) => responder.status)));
+    return ["All", ...unique];
+  }, [responders]);
+
+  const filteredResponders = responders.filter((responder) =>
+    statusFilter === "All" ? true : responder.status === statusFilter
   );
 
   const handleStatusChange = (responderId, newStatus) => {
     if (onStatusChange) {
       onStatusChange(responderId, newStatus);
     } else {
-      setLocalResponders((prevResponders) =>
-        prevResponders.map((r) =>
-          r.id === responderId
-            ? { ...r, status: newStatus, lastActive: "Just now" }
-            : r
+      setLocalResponders((prev) =>
+        prev.map((responder) =>
+          responder.id === responderId
+            ? { ...responder, status: newStatus, lastActive: "Just now" }
+            : responder
         )
       );
     }
@@ -99,108 +170,83 @@ export default function Responders({
     );
   };
 
-  // Count responders by status
-  const responderCounts = responders.reduce((acc, r) => {
-    acc[r.status] = (acc[r.status] || 0) + 1;
-    return acc;
-  }, {});
-
   return (
-    <div className="bg-ui-surface p-4 rounded-lg shadow">
-      <h2 className="text-xl font-bold text-ui-text mb-4">Responders</h2>
-
-      {/* Status summary */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-ui-background p-2 rounded-lg flex flex-col items-center">
-          <div className="w-3 h-3 rounded-full bg-status-resolved mb-1"></div>
-          <span className="text-sm font-medium">Available</span>
-          <span className="text-xl font-bold">
-            {responderCounts.Available || 0}
-          </span>
-        </div>
-        <div className="bg-ui-background p-2 rounded-lg flex flex-col items-center">
-          <div className="w-3 h-3 rounded-full bg-status-medium mb-1"></div>
-          <span className="text-sm font-medium">En Route</span>
-          <span className="text-xl font-bold">
-            {responderCounts["En Route"] || 0}
-          </span>
-        </div>
-        <div className="bg-ui-background p-2 rounded-lg flex flex-col items-center">
-          <div className="w-3 h-3 rounded-full bg-brand-primary mb-1"></div>
-          <span className="text-sm font-medium">On Scene</span>
-          <span className="text-xl font-bold">
-            {responderCounts["On Scene"] || 0}
-          </span>
-        </div>
+    <div className="bg-ui-surface p-4 rounded-2xl shadow space-y-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-ui-text">Responder Directory</h2>
+        <span className="text-xs uppercase tracking-wider text-ui-subtext">Live</span>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-2 mb-4 border-b">
-        {["All", "Available", "En Route", "On Scene", "Off Duty"].map(
-          (status) => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`py-2 px-3 text-sm font-medium ${
-                statusFilter === status
-                  ? "border-b-2 border-brand-primary text-brand-primary"
-                  : "text-ui-subtext"
-              }`}
-            >
-              {status}
-            </button>
-          )
-        )}
+      <div className="grid grid-cols-3 gap-2">
+        {summaryCards.map((card) => (
+          <div
+            key={card.key}
+            className="flex flex-col items-center rounded-xl bg-ui-background p-3"
+          >
+            <span className={`mb-1 h-3 w-3 rounded-full ${card.color}`}></span>
+            <span className="text-xs font-medium text-ui-subtext">{card.label}</span>
+            <span className={`text-lg font-semibold ${card.text}`}>{card.count}</span>
+          </div>
+        ))}
       </div>
 
-      {/* Responders list */}
+      <div className="flex flex-wrap items-center gap-2 border-b pb-2">
+        {statusOptions.map((status) => (
+          <button
+            key={status}
+            onClick={() => setStatusFilter(status)}
+            className={`rounded-full px-3 py-1 text-sm font-medium transition ${
+              statusFilter === status
+                ? "bg-brand-primary/10 text-brand-primary"
+                : "text-ui-subtext"
+            }`}
+          >
+            {status}
+          </button>
+        ))}
+      </div>
+
       <div className="space-y-3">
-        {filteredResponders.length > 0 ? (
-          filteredResponders.map((r) => (
+        {filteredResponders.length ? (
+          filteredResponders.map((responder) => (
             <div
-              key={r.id}
-              className="p-3 bg-ui-background rounded-lg shadow-sm cursor-pointer hover:shadow-card transition-shadow"
-              onClick={() => setSelectedResponder(r)}
+              key={responder.id}
+              className="rounded-xl border border-ui-border bg-ui-background p-3 shadow-sm transition hover:shadow-card"
+              onClick={() => setSelectedResponder(responder)}
             >
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <div className="bg-ui-subtext/10 p-2 rounded-full">
-                    <UserGroupIcon className="w-5 h-5 text-brand-primary" />
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-primary/10">
+                    <UserGroupIcon className="h-5 w-5 text-brand-primary" />
                   </div>
-                  <div>
-                    <p className="font-medium text-ui-text">{r.name}</p>
-                    <div className="flex items-center gap-1 text-xs text-ui-subtext">
-                      <UserIcon className="w-3 h-3" />
-                      <span>{r.members} members</span>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-ui-text">{responder.name}</p>
+                      <span className="text-[11px] uppercase tracking-wide text-ui-subtext">
+                        {responder.agency}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-ui-subtext">
+                      <span className="flex items-center gap-1">
+                        <UserIcon className="h-3 w-3" /> {responder.members} members
+                      </span>
+                      <span>• Last active {responder.lastActive}</span>
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-col items-end">
-                  <span
-                    className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      r.status === "Available"
-                        ? "bg-status-resolved/10 text-status-resolved"
-                        : r.status === "En Route"
-                        ? "bg-status-medium/10 text-status-medium"
-                        : r.status === "On Scene"
-                        ? "bg-brand-primary/10 text-brand-primary"
-                        : "bg-gray-100 text-ui-subtext"
-                    }`}
-                  >
-                    {r.status}
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusChipClass(responder.status)}`}>
+                    {STATUS_CATEGORY[responder.status] ?? responder.status}
                   </span>
-                  <span className="text-xs text-ui-subtext mt-1">
-                    {r.location}
-                  </span>
+                  <span className="text-xs text-ui-subtext">{responder.location}</span>
                 </div>
               </div>
 
-              {/* Skills/specialization */}
               <div className="mt-2 flex flex-wrap gap-1">
-                {r.specialization.map((skill, idx) => (
+                {responder.specialization.map((skill) => (
                   <span
-                    key={idx}
-                    className="bg-ui-subtext/10 text-ui-subtext px-2 py-0.5 rounded-full text-xs"
+                    key={skill}
+                    className="rounded-full bg-brand-primary/5 px-2 py-0.5 text-xs text-brand-primary"
                   >
                     {skill}
                   </span>
@@ -209,70 +255,53 @@ export default function Responders({
             </div>
           ))
         ) : (
-          <p className="text-sm text-ui-subtext text-center py-4">
+          <p className="py-4 text-center text-sm text-ui-subtext">
             No responders match the selected filter.
           </p>
         )}
       </div>
 
-      {/* Modal for responder detail */}
       {selectedResponder && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-ui-surface p-5 rounded-2xl w-full max-w-sm shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">{selectedResponder.name}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-ui-surface p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">{selectedResponder.name}</h3>
+                <p className="text-xs uppercase tracking-wide text-ui-subtext">
+                  {selectedResponder.agency}
+                </p>
+              </div>
               <button
                 onClick={() => setSelectedResponder(null)}
-                className="text-ui-subtext hover:text-ui-text"
+                className="text-ui-subtext transition hover:text-ui-text"
+                aria-label="Close responder detail"
               >
-                <XCircleIcon className="w-6 h-6" />
+                <XCircleIcon className="h-6 w-6" />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-ui-subtext">Status:</span>
-                <span
-                  className={`font-medium ${
-                    selectedResponder.status === "Available"
-                      ? "text-status-resolved"
-                      : selectedResponder.status === "En Route"
-                      ? "text-status-medium"
-                      : selectedResponder.status === "On Scene"
-                      ? "text-brand-primary"
-                      : "text-ui-subtext"
-                  }`}
-                >
-                  {selectedResponder.status}
+                <span className="text-ui-subtext">Status</span>
+                <span className={`font-semibold ${statusTextClass(selectedResponder.status)}`}>
+                  {STATUS_CATEGORY[selectedResponder.status] ?? selectedResponder.status}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-ui-subtext">Members:</span>
-                <span className="font-medium">{selectedResponder.members}</span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-ui-subtext">Location:</span>
-                <span className="font-medium">
-                  {selectedResponder.location}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-ui-subtext">Last Active:</span>
-                <span className="font-medium">
-                  {selectedResponder.lastActive}
-                </span>
+              <div className="grid grid-cols-2 gap-3">
+                <InfoItem label="Members" value={selectedResponder.members} />
+                <InfoItem label="Last Active" value={selectedResponder.lastActive} />
+                <InfoItem label="Location" value={selectedResponder.location} />
+                <InfoItem label="Last Check-in" value={selectedResponder.lastCheckIn} />
               </div>
 
               <div>
-                <span className="text-ui-subtext">Specialization:</span>
+                <p className="text-xs uppercase tracking-wide text-ui-subtext">Specialization</p>
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {selectedResponder.specialization.map((skill, idx) => (
+                  {selectedResponder.specialization.map((skill) => (
                     <span
-                      key={idx}
-                      className="bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full text-sm"
+                      key={skill}
+                      className="rounded-full bg-brand-primary/10 px-2 py-0.5 text-xs text-brand-primary"
                     >
                       {skill}
                     </span>
@@ -280,54 +309,71 @@ export default function Responders({
                 </div>
               </div>
 
-              <div className="pt-4">
-                <p className="font-medium mb-2">Change Status:</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {["Available", "En Route", "On Scene", "Off Duty"]
-                    .filter((s) => s !== selectedResponder.status)
-                    .map((status) => (
-                      <button
-                        key={status}
-                        onClick={() => {
-                          handleStatusChange(selectedResponder.id, status);
-                          setSelectedResponder((prev) => ({ ...prev, status }));
-                        }}
-                        className={`py-2 px-3 rounded-lg text-sm font-medium ${
-                          status === "Available"
-                            ? "bg-status-resolved/10 text-status-resolved"
-                            : status === "En Route"
-                            ? "bg-status-medium/10 text-status-medium"
-                            : status === "On Scene"
-                            ? "bg-brand-primary/10 text-brand-primary"
-                            : "bg-gray-100 text-ui-subtext"
-                        }`}
-                      >
-                        {status}
-                      </button>
-                    ))}
+              <div>
+                <p className="text-xs uppercase tracking-wide text-ui-subtext">Certifications</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {selectedResponder.certifications.map((cert) => (
+                    <span
+                      key={cert}
+                      className="rounded-md bg-ui-background px-2 py-0.5 text-xs text-ui-text"
+                    >
+                      {cert}
+                    </span>
+                  ))}
                 </div>
               </div>
 
-              <div className="pt-4 flex justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-ui-subtext">Recent assignments</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ui-text/90">
+                  {selectedResponder.dutyHistory.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-wide text-ui-subtext">Change status</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {["Available", "En Route", "On Scene", "Off Duty"].map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => handleStatusChange(selectedResponder.id, status)}
+                      className={`rounded-lg px-3 py-2 text-xs font-semibold ${statusChipClass(status)}`}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
                 <button
                   onClick={() => setSelectedResponder(null)}
-                  className="w-full py-2 bg-ui-background text-ui-text rounded-lg"
+                  className="flex-1 rounded-lg bg-ui-background py-2 text-sm font-semibold text-ui-text"
                 >
                   Close
                 </button>
                 <button
-                  onClick={() => {
-                    alert(`Contacting ${selectedResponder.name}...`);
-                  }}
-                  className="w-full py-2 bg-brand-primary text-white rounded-lg"
+                  onClick={() => alert(`Contacting ${selectedResponder.name}...`)}
+                  className="flex-1 rounded-lg bg-brand-primary py-2 text-sm font-semibold text-white"
                 >
-                  Contact Team
+                  Contact team
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function InfoItem({ label, value }) {
+  return (
+    <div className="rounded-lg bg-ui-background p-2 text-xs">
+      <p className="text-ui-subtext">{label}</p>
+      <p className="font-semibold text-ui-text">{value}</p>
     </div>
   );
 }

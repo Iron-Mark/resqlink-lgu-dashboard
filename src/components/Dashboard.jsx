@@ -7,7 +7,6 @@ import AlertFeed from "./AlertFeed";
 import PopupIncident from "./PopupIncident";
 import QuickActions from "./QuickActions";
 import MapView from "./MapView";
-import Responders from "./Responders";
 
 import {
   FunnelIcon,
@@ -68,14 +67,80 @@ const enrichIncidentWithGeo = (incident) => {
     coordinates,
     status: incident.status || "Awaiting Dispatch",
     assignedResponder: incident.assignedResponder || null,
-    citizenReports:
-      incident.citizenReports ?? severityDefaults.citizenReports,
-    aiHazardScore:
-      incident.aiHazardScore ?? severityDefaults.aiHazardScore,
+    citizenReports: incident.citizenReports ?? severityDefaults.citizenReports,
+    aiHazardScore: incident.aiHazardScore ?? severityDefaults.aiHazardScore,
     riskBand: incident.riskBand || severityDefaults.riskBand,
     aiSummary: incident.aiSummary || severityDefaults.aiSummary,
-    impactRadiusKm:
-      incident.impactRadiusKm ?? severityDefaults.impactRadiusKm,
+    impactRadiusKm: incident.impactRadiusKm ?? severityDefaults.impactRadiusKm,
+  };
+};
+
+const toRad = (value) => (value * Math.PI) / 180;
+
+const computeDistanceKm = (origin, target) => {
+  if (!origin || !target) return null;
+  const lat1 = Number(origin.lat);
+  const lng1 = Number(origin.lng);
+  const lat2 = Number(target.lat);
+  const lng2 = Number(target.lng);
+  if (
+    !Number.isFinite(lat1) ||
+    !Number.isFinite(lng1) ||
+    !Number.isFinite(lat2) ||
+    !Number.isFinite(lng2)
+  ) {
+    return null;
+  }
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return 6371 * c;
+};
+
+const pickResponderForIncident = (incident, responderList) => {
+  if (!incident?.coordinates) return null;
+  const prioritizedStatuses = new Set(["Available", "Standby"]);
+  const fallbackStatuses = new Set(["En Route", "On Scene"]);
+  const prioritized = [];
+  const secondary = [];
+
+  responderList.forEach((responder) => {
+    if (responder.currentAssignment) {
+      return;
+    }
+    const distanceKm = computeDistanceKm(incident.coordinates, responder.coordinates);
+    const candidate = {
+      responder,
+      distanceKm: Number.isFinite(distanceKm) ? distanceKm : Infinity,
+    };
+    if (prioritizedStatuses.has(responder.status)) {
+      prioritized.push(candidate);
+    } else if (fallbackStatuses.has(responder.status)) {
+      secondary.push(candidate);
+    }
+  });
+
+  const ordered = prioritized.length ? prioritized : secondary;
+  if (!ordered.length) {
+    return null;
+  }
+
+  ordered.sort((a, b) => a.distanceKm - b.distanceKm);
+  const [top] = ordered;
+  const etaMinutes = Number.isFinite(top.distanceKm)
+    ? Math.max(3, Math.round(top.distanceKm * 4))
+    : top.responder.etaMinutes ?? 12;
+
+  return {
+    responder: top.responder,
+    etaMinutes,
+    distanceKm: top.distanceKm,
   };
 };
 
@@ -125,8 +190,7 @@ export default function Dashboard() {
       riskBand: "Amber",
       impactRadiusKm: 0.9,
       reportSources: ["Command Center", "CCTV"],
-      recommendedAction:
-        "Hold perimeter and prepare backup water supply.",
+      recommendedAction: "Hold perimeter and prepare backup water supply.",
       assignedResponder: {
         id: "R-002",
         name: "Team Bravo",
@@ -289,7 +353,6 @@ export default function Dashboard() {
     },
   ];
 
-
   const [activeIncidents, setActiveIncidents] = useState(
     initialIncidents.map(enrichIncidentWithGeo)
   );
@@ -331,53 +394,75 @@ export default function Dashboard() {
 
   const handleAssign = (id, responder = null) => {
     const targetIncident = activeIncidents.find((inc) => inc.id === id);
+    if (!targetIncident) {
+      return;
+    }
+
+    let resolvedResponder = responder;
+    let resolvedEta = responder?.etaMinutes ?? null;
+
+    if (!resolvedResponder) {
+      const suggestion = pickResponderForIncident(targetIncident, responders);
+      if (suggestion) {
+        resolvedResponder = suggestion.responder;
+        resolvedEta = suggestion.etaMinutes;
+      }
+    }
+
+    if (!resolvedResponder) {
+      const incidentLabel = ${targetIncident.type} in ;
+      addAlert({
+        id: ssign--,
+        msg: ${incidentLabel} queued: no available team. Review in Management.,
+        time: "Just now",
+        type: "System",
+      });
+      closeIncidentPopup();
+      return;
+    }
+
+    const responderStatusLabel =
+      resolvedResponder.status === "On Scene" ? "On Scene" : "En Route";
+
     setActiveIncidents((prev) =>
       prev.map((inc) =>
         inc.id === id
           ? {
               ...inc,
-              status: responder
-                ? `Assigned to ${responder.name}`
-                : "Assignment in Progress",
-              assignedResponder: responder
-                ? {
-                    id: responder.id,
-                    name: responder.name,
-                    status: responder.status,
-                    etaMinutes: responder.etaMinutes,
-                  }
-                : inc.assignedResponder,
-              etaMinutes: responder?.etaMinutes ?? inc.etaMinutes ?? null,
+              status: Assigned to ,
+              assignedResponder: {
+                id: resolvedResponder.id,
+                name: resolvedResponder.name,
+                status: responderStatusLabel,
+                etaMinutes:
+                  resolvedEta ?? resolvedResponder.etaMinutes ?? inc.etaMinutes ?? null,
+              },
+              etaMinutes:
+                resolvedEta ?? resolvedResponder.etaMinutes ?? inc.etaMinutes ?? null,
             }
           : inc
       )
     );
 
-    if (responder) {
-      setResponders((prev) =>
-        prev.map((team) =>
-          team.id === responder.id
-            ? {
-                ...team,
-                status: "En Route",
-                currentAssignment: id,
-                etaMinutes: responder.etaMinutes ?? team.etaMinutes ?? 10,
-                lastActive: "Just now",
-              }
-            : team
-        )
-      );
-    }
+    setResponders((prev) =>
+      prev.map((team) =>
+        team.id === resolvedResponder.id
+          ? {
+              ...team,
+              status: responderStatusLabel,
+              currentAssignment: id,
+              etaMinutes: resolvedEta ?? team.etaMinutes ?? 10,
+              lastActive: "Just now",
+            }
+          : team
+      )
+    );
 
-    const incidentLabel = targetIncident
-      ? `${targetIncident.type} in ${targetIncident.location}`
-      : `Incident ${id}`;
+    const incidentLabel = ${targetIncident.type} in ;
 
     addAlert({
-      id: `assign-${id}-${Date.now()}`,
-      msg: responder
-        ? `${responder.name} assigned to ${incidentLabel}.`
-        : `${incidentLabel} queued for mission assignment.`,
+      id: ssign--,
+      msg: ${resolvedResponder.name} assigned to .,
       time: "Just now",
       type: "System",
     });
@@ -613,14 +698,6 @@ export default function Dashboard() {
             </p>
           </div>
         )}
-      </div>
-
-      {/* Responders Section */}
-      <div className="mt-6">
-        <Responders
-          responders={responders}
-          onStatusChange={handleResponderStatusChange}
-        />
       </div>
 
       {/* Alerts Feed */}
