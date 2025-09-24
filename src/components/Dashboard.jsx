@@ -471,6 +471,59 @@ export default function Dashboard() {
     }
   };
 
+  const generateFacilityId = () => {
+    const suffix = Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, "0");
+    return `FAC-${Date.now()}-${suffix}`;
+  };
+
+  const handleFacilityAdd = (facility) => {
+    if (!facility) return;
+    const coordinates = facility.coordinates || {};
+    const lat = Number(coordinates.lat);
+    const lng = Number(coordinates.lng);
+    const prepared = {
+      id: facility.id || generateFacilityId(),
+      type: facility.type?.trim() || "Facility",
+      name: facility.name?.trim() || "Unnamed site",
+      address: facility.address?.trim() || "Address pending",
+      hotline: facility.hotline?.trim() || "",
+      status: facility.status || "Open",
+      notes: facility.notes?.trim() || "",
+      coordinates: {
+        lat: Number.isFinite(lat) ? lat : DEFAULT_COORDINATE.lat,
+        lng: Number.isFinite(lng) ? lng : DEFAULT_COORDINATE.lng,
+      },
+      lastUpdated: new Date().toISOString(),
+    };
+    setCoreFacilities((prev) => {
+      const filtered = prev.filter((facility) => facility.id !== prepared.id);
+      return [prepared, ...filtered];
+    });
+    addAlert({
+      id: `facility-${prepared.id}`,
+      msg: `${prepared.type}: ${prepared.name} added`,
+      time: "Just now",
+      type: "System",
+    });
+  };
+
+  const handleFacilityRemove = (facilityId) => {
+    if (!facilityId) return;
+    const target = coreFacilities.find((facility) => facility.id === facilityId);
+    if (!target) {
+      return;
+    }
+    setCoreFacilities((prev) => prev.filter((facility) => facility.id !== facilityId));
+    addAlert({
+      id: `facility-removed-${facilityId}`,
+      msg: `${target.name} removed from map`,
+      time: "Just now",
+      type: "System",
+    });
+  };
+
   const handleAssign = (id, responder = null) => {
     const foundIncident = activeIncidents.find((inc) => inc.id === id);
     if (!foundIncident) {
@@ -757,6 +810,8 @@ export default function Dashboard() {
                 viewerRole={userRole}
                 onAssign={handleAssign}
                 onFacilityUpdate={handleFacilityUpdate}
+                onFacilityAdd={handleFacilityAdd}
+                onFacilityRemove={handleFacilityRemove}
                 onIncidentSelect={showIncidentPopup}
               />
             )}

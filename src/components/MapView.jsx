@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from "react";
+﻿import { useState, useEffect, useMemo, useCallback } from "react";
 import { MapPinIcon } from "@heroicons/react/24/solid";
 import {
   MapContainer,
@@ -9,6 +9,7 @@ import {
   useMap,
   Circle,
   Tooltip,
+  useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
 import {
@@ -66,8 +67,10 @@ const createIncidentIcon = (severity, isSelected = false) => {
   return L.divIcon({
     className: "custom-div-icon incident-marker",
     html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:${borderWidth}px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,0.3);transform:translate(-50%,-50%);position:relative;">
-        <span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-45%);font-size:11px;font-weight:700;color:#fff;font-family:Inter,Arial,sans-serif;">${severity?.[0] ?? ""}</span>
-      </div>` ,
+        <span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-45%);font-size:11px;font-weight:700;color:#fff;font-family:Inter,Arial,sans-serif;">${
+          severity?.[0] ?? ""
+        }</span>
+      </div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2],
@@ -86,7 +89,7 @@ const createResponderIcon = (status) => {
 
   return L.divIcon({
     className: "custom-div-icon responder-marker",
-    html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.25);"></div>` ,
+    html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.25);"></div>`,
     iconSize: [14, 14],
     iconAnchor: [7, 7],
     popupAnchor: [0, -6],
@@ -202,13 +205,15 @@ function getFacilityStatusAccent(status, fallbackColor) {
   return fallbackColor;
 }
 
-function createFacilityIcon(type, status) {
+function createFacilityIcon(type, status, isHighlighted = false) {
   const meta = FACILITY_TYPE_META[type] ?? FACILITY_TYPE_META.__fallback;
   const accent = getFacilityStatusAccent(status, meta.color);
-  const glyphHtml = meta.markerHtml ?? '<span class="facility-marker-glyph">F</span>';
+  const glyphHtml =
+    meta.markerHtml ?? '<span class="facility-marker-glyph">F</span>';
+  const highlightFlag = isHighlighted ? "true" : "false";
   return L.divIcon({
     className: "custom-div-icon facility-marker",
-    html: `<div class="facility-marker-pin" style="--facility-color:${meta.color};--facility-ring:${accent};">${glyphHtml}</div>`,
+    html: `<div class="facility-marker-pin" data-highlight="${highlightFlag}" style="--facility-color:${meta.color};--facility-ring:${accent};">${glyphHtml}</div>`,
     iconSize: [30, 36],
     iconAnchor: [15, 32],
     popupAnchor: [0, -30],
@@ -263,6 +268,8 @@ export default function MapView({
   viewerRole = "Citizen",
   onAssign,
   onFacilityUpdate,
+  onFacilityAdd,
+  onFacilityRemove,
 }) {
   const incidents = useMemo(
     () =>
@@ -295,8 +302,7 @@ export default function MapView({
   const sortedIncidents = useMemo(() => {
     return [...incidents].sort((a, b) => {
       const severityCompare =
-        (SEVERITY_ORDER[a.severity] ?? 99) -
-        (SEVERITY_ORDER[b.severity] ?? 99);
+        (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
       if (severityCompare !== 0) return severityCompare;
       return (b.citizenReports ?? 0) - (a.citizenReports ?? 0);
     });
@@ -341,7 +347,16 @@ export default function MapView({
     });
     return visibility;
   });
+  const [isAddingFacility, setIsAddingFacility] = useState(false);
+  const [draftFacility, setDraftFacility] = useState(null);
   const isFacilityManager = viewerRole?.toLowerCase().includes("lgu");
+
+  useEffect(() => {
+    if (!isFacilityManager) {
+      setIsAddingFacility(false);
+      setDraftFacility(null);
+    }
+  }, [isFacilityManager]);
 
   const triggerHaptic = (pattern = HAPTIC_SHORT) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -410,7 +425,12 @@ export default function MapView({
 
   useEffect(() => {
     if (!facilityTypes.length) {
-      setFacilityVisibility({});
+      setFacilityVisibility((prev) => {
+        if (!prev || Object.keys(prev).length === 0) {
+          return prev;
+        }
+        return {};
+      });
       return;
     }
 
@@ -421,7 +441,10 @@ export default function MapView({
       });
       const prevKeys = Object.keys(prev || {});
       const sameKeyLength = prevKeys.length === facilityTypes.length;
-      if (sameKeyLength && facilityTypes.every((type) => prevKeys.includes(type))) {
+      if (
+        sameKeyLength &&
+        facilityTypes.every((type) => prevKeys.includes(type))
+      ) {
         let changed = false;
         facilityTypes.forEach((type) => {
           if (next[type] !== prev[type]) {
@@ -434,6 +457,20 @@ export default function MapView({
       }
       return next;
     });
+  }, [facilityTypes]);
+
+  const facilityTypeSuggestions = useMemo(() => {
+    const canonical = [
+      "Hospital",
+      "Police Station",
+      "Fire Station",
+      "Evacuation Center",
+    ];
+    const extras = facilityTypes.filter(
+      (type) => type && !canonical.includes(type)
+    );
+    const merged = Array.from(new Set([...canonical, ...extras]));
+    return merged;
   }, [facilityTypes]);
 
   const facilityMarkers = useMemo(
@@ -457,7 +494,6 @@ export default function MapView({
             ...facility,
             lat,
             lng,
-            icon: createFacilityIcon(facility.type, facility.status),
             dialHref: toDialHref(facility.hotline),
           };
         })
@@ -474,6 +510,34 @@ export default function MapView({
       }),
     [facilityMarkers, facilityVisibility, showFacilities]
   );
+  const nearestFacilities = useMemo(() => {
+    if (!selectedIncident || !visibleFacilities.length) {
+      return [];
+    }
+    const origin = { lat: selectedIncident.lat, lng: selectedIncident.lng };
+    const byType = new Map();
+    visibleFacilities.forEach((facility) => {
+      const distanceKm = calculateDistanceKm(
+        { lat: facility.lat, lng: facility.lng },
+        origin
+      );
+      if (distanceKm == null) {
+        return;
+      }
+      const current = byType.get(facility.type);
+      if (!current || distanceKm < (current.distanceKm ?? Infinity)) {
+        byType.set(facility.type, { ...facility, distanceKm });
+      }
+    });
+    return Array.from(byType.values()).sort(
+      (a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity)
+    );
+  }, [visibleFacilities, selectedIncident]);
+  const highlightedFacilityIds = useMemo(
+    () => new Set(nearestFacilities.map((facility) => facility.id)),
+    [nearestFacilities]
+  );
+  const defaultFacilityType = facilityTypeSuggestions[0] ?? "Hospital";
   const facilityStatusOptions = FACILITY_STATUS_OPTIONS;
   const facilityRoleLabel = isFacilityManager ? "Manage" : "View only";
 
@@ -549,13 +613,19 @@ export default function MapView({
 
   const wrapperClassName = isFullScreen
     ? "fixed inset-0 z-50 flex flex-col overflow-hidden bg-ui-surface px-4 py-4 sm:px-6"
-    : "flex flex-col gap-4 rounded-xl bg-ui-surface p-4 shadow";
+    : "rounded-2xl border border-ui-border/60 bg-ui-surface p-6 shadow-lg lg:p-8";
 
-  const containerClassName = isFullScreen
-    ? "relative flex-1 rounded-3xl border border-ui-border/50 bg-ui-background"
-    : "relative rounded-2xl border border-ui-border/60 bg-ui-background";
+  const mapContainerClassName = isFullScreen
+    ? "relative flex-1 rounded-3xl border border-ui-border/50 bg-ui-background z-10"
+    : "relative rounded-2xl border border-ui-border/70 bg-ui-background shadow-inner  z-10";
 
-  const mapHeight = isFullScreen ? "100%" : "min(60vh, 360px)";
+  const layoutClassName = isFullScreen
+    ? "flex flex-col flex-1 gap-4"
+    : "flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1.9fr)_minmax(320px,1fr)] lg:items-start lg:gap-6";
+
+  const mapViewportStyle = isFullScreen
+    ? { minHeight: "100%" }
+    : { minHeight: "420px", height: "60vh", maxHeight: "640px" };
 
   const handleToggleFacilities = () => {
     triggerHaptic();
@@ -590,9 +660,115 @@ export default function MapView({
     setIsFullScreen((prev) => !prev);
   };
 
+  const handleStartAddFacility = () => {
+    if (!isFacilityManager) return;
+    triggerHaptic();
+    setIsAddingFacility(true);
+    setDraftFacility(null);
+  };
+
+  const handleCancelAddFacility = () => {
+    setIsAddingFacility(false);
+    setDraftFacility(null);
+  };
+
+  const handleFacilityLocationSelect = useCallback(
+    ({ lat, lng }) => {
+      if (!isFacilityManager) return;
+      const safeLat = Number(lat);
+      const safeLng = Number(lng);
+      if (!Number.isFinite(safeLat) || !Number.isFinite(safeLng)) {
+        return;
+      }
+      setDraftFacility({
+        lat: safeLat,
+        lng: safeLng,
+        type: defaultFacilityType,
+        status: FACILITY_STATUS_OPTIONS[0],
+      });
+      setIsAddingFacility(false);
+    },
+    [defaultFacilityType, isFacilityManager]
+  );
+
+  const handleFacilityFormSubmit = useCallback(
+    (payload) => {
+      if (!onFacilityAdd || !payload) return;
+      const { coordinates = {} } = payload;
+      const lat = Number(coordinates.lat);
+      const lng = Number(coordinates.lng);
+      const sanitized = {
+        ...payload,
+        type: payload.type?.trim() || defaultFacilityType || "Facility",
+        name: payload.name?.trim() || "Unnamed site",
+        address: payload.address?.trim() || "Address pending",
+        hotline: payload.hotline?.trim() || "",
+        status: payload.status || FACILITY_STATUS_OPTIONS[0],
+        notes: payload.notes?.trim() || "",
+        coordinates: {
+          lat: Number.isFinite(lat) ? lat : DEFAULT_CENTER[0],
+          lng: Number.isFinite(lng) ? lng : DEFAULT_CENTER[1],
+        },
+      };
+      triggerHaptic(HAPTIC_TOGGLE);
+      onFacilityAdd(sanitized);
+      setIsAddingFacility(false);
+      setDraftFacility(null);
+    },
+    [defaultFacilityType, onFacilityAdd]
+  );
+
+  const handleFacilityDelete = useCallback(
+    (facility) => {
+      if (!facility?.id || !onFacilityRemove) {
+        return;
+      }
+      const confirmed =
+        typeof window !== "undefined"
+          ? window.confirm(`Remove ${facility.name || "facility"}?`)
+          : true;
+      if (!confirmed) return;
+      triggerHaptic(HAPTIC_TOGGLE);
+      onFacilityRemove(facility.id);
+    },
+    [onFacilityRemove]
+  );
+
+  const facilityFormTypeOptions = facilityTypeSuggestions;
+
+  const focusFacility = useCallback(
+    (facilityId) => {
+      const target = facilityMarkers.find(
+        (facility) => facility.id === facilityId
+      );
+      if (!target) return;
+      setShowFacilities(true);
+      if (target.type) {
+        setFacilityVisibility((prev) => {
+          if (!prev) {
+            return prev;
+          }
+          const current = prev[target.type];
+          if (current === true || current === undefined) {
+            return prev;
+          }
+          return {
+            ...prev,
+            [target.type]: true,
+          };
+        });
+      }
+      setMapCenter([target.lat, target.lng]);
+      setMapZoom((prev) => Math.max(prev, 14));
+      setIsAddingFacility(false);
+      setDraftFacility(null);
+    },
+    [facilityMarkers]
+  );
+
   return (
     <div className={wrapperClassName}>
-      <div className={`flex flex-col gap-4 ${isFullScreen ? "flex-1" : ""}`}>
+      <div className={`flex flex-col gap-6 ${isFullScreen ? "flex-1" : ""}`}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -601,63 +777,100 @@ export default function MapView({
                 <Radar className="h-3 w-3" /> Live
               </span>
             </div>
-            <p className="mt-1 text-xs text-ui-subtext">Unified view for rapid decisions.</p>
+            <p className="mt-1 text-xs text-ui-subtext">
+              Unified view for rapid decisions.
+            </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="hidden text-[11px] font-semibold uppercase tracking-wide text-ui-subtext lg:inline">
+              Map tools
+            </span>
             <TogglePill
               active={showFacilities}
               icon={Building2}
-              label="Toggle core facilities"
+              label="Core facilities"
               onClick={handleToggleFacilities}
             />
             <TogglePill
               active={showHazards}
               icon={Radar}
-              label="Toggle hazard rings"
+              label="Hazard rings"
               onClick={handleToggleHazards}
             />
             <TogglePill
               active={showResponders}
               icon={UsersIcon}
-              label="Toggle responders"
+              label="Responders"
               onClick={handleToggleResponders}
             />
             <TogglePill
               active={autoFocus}
               icon={Crosshair}
-              label="Toggle auto focus"
+              label="Auto focus"
               onClick={handleToggleAutoFocus}
             />
             <button
               type="button"
               onClick={handleToggleFullScreen}
-              className={`flex h-9 w-9 items-center justify-center rounded-full border border-ui-border bg-ui-background text-ui-text shadow-sm transition ${
-                isFullScreen ? "border-brand-primary bg-brand-primary text-white" : ""
+              className={`group flex h-9 w-9 items-center justify-center rounded-full border border-ui-border bg-ui-background text-ui-text shadow-sm transition hover:bg-ui-background/80 lg:h-auto lg:min-h-[36px] lg:w-auto lg:justify-start lg:gap-2 lg:px-3 lg:py-1.5 ${
+                isFullScreen
+                  ? "border-brand-primary bg-brand-primary text-white"
+                  : ""
               }`}
               aria-label={isFullScreen ? "Exit full screen map" : "Expand map"}
+              title={isFullScreen ? "Exit full screen map" : "Expand map"}
             >
-              {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              {isFullScreen ? (
+                <Minimize2 className="h-4 w-4" />
+              ) : (
+                <Maximize2 className="h-4 w-4" />
+              )}
+              <span className="hidden text-xs font-semibold lg:inline">
+                {isFullScreen ? "Collapse" : "Full screen"}
+              </span>
             </button>
           </div>
         </div>
 
         {showFacilities && facilityMarkers.length > 0 && (
           <div className="rounded-2xl border border-ui-border/60 bg-ui-background px-3 py-2">
-            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-ui-subtext">
+            <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-ui-subtext">
               <span>Core Facilities</span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[9px] ${
-                  isFacilityManager
-                    ? "bg-status-low/15 text-status-low"
-                    : "bg-ui-border text-ui-subtext"
-                }`}
-              >
-                {facilityRoleLabel}
-              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[9px] ${
+                    isFacilityManager
+                      ? "bg-status-low/15 text-status-low"
+                      : "bg-ui-border text-ui-subtext"
+                  }`}
+                >
+                  {facilityRoleLabel}
+                </span>
+                {isFacilityManager && onFacilityAdd && (
+                  <button
+                    type="button"
+                    onClick={
+                      draftFacility || isAddingFacility
+                        ? handleCancelAddFacility
+                        : handleStartAddFacility
+                    }
+                    className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition ${
+                      draftFacility || isAddingFacility
+                        ? "border-status-high/60 text-status-high"
+                        : "border-brand-primary text-brand-primary hover:bg-brand-primary/10"
+                    }`}
+                  >
+                    {draftFacility || isAddingFacility
+                      ? "Cancel add"
+                      : "Add facility"}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {facilityTypes.map((type) => {
-                const meta = FACILITY_TYPE_META[type] ?? FACILITY_TYPE_META.__fallback;
+                const meta =
+                  FACILITY_TYPE_META[type] ?? FACILITY_TYPE_META.__fallback;
                 return (
                   <FacilityFilterChip
                     key={type}
@@ -670,14 +883,34 @@ export default function MapView({
                 );
               })}
             </div>
+            {isFacilityManager && isAddingFacility && (
+              <div className="mt-2 rounded-lg border border-dashed border-brand-primary/60 bg-brand-primary/5 px-3 py-2 text-[11px] text-brand-primary">
+                Tap anywhere on the map to place the new facility pin, or select
+                �Cancel add� to stop.
+              </div>
+            )}
+            {draftFacility && (
+              <div className="mt-2 rounded-lg border border-ui-border/70 bg-ui-surface/80 px-3 py-2 text-[11px] text-ui-subtext">
+                Pin placed at {draftFacility.lat.toFixed(5)},{" "}
+                {draftFacility.lng.toFixed(5)} � complete the details to save.
+              </div>
+            )}
+            {nearestFacilities.length > 0 && (
+              <p className="mt-2 text-[10px] text-brand-primary/80">
+                Pulsing pins show the closest facility for each service relative
+                to the focused incident.
+              </p>
+            )}
             {facilityMarkers.length > 0 && visibleFacilities.length === 0 && (
-              <p className="mt-2 text-[11px] text-ui-subtext">No facilities match the current filters.</p>
+              <p className="mt-2 text-[11px] text-ui-subtext">
+                No facilities match the current filters.
+              </p>
             )}
           </div>
         )}
 
         {!isFullScreen && (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <FocusStat
               icon={AlertTriangle}
               iconClassName="text-status-high"
@@ -709,253 +942,542 @@ export default function MapView({
           </div>
         )}
 
-        <div className={containerClassName} style={{ height: mapHeight }}>
-          {!mapIsReady ? (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-ui-background">
-              <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-brand-primary" />
-            </div>
-          ) : (
-            <MapContainer
-              center={mapCenter}
-              zoom={mapZoom}
-              className="h-full w-full"
-              scrollWheelZoom
-              zoomControl={false}
-              doubleClickZoom
-              dragging
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
+        <div className={layoutClassName}>
+          <div
+            className={`${mapContainerClassName} ${
+              isFullScreen ? "" : "lg:min-h-[520px]"
+            }`}
+            style={mapViewportStyle}
+          >
+            {!mapIsReady ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-ui-background">
+                <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-brand-primary" />
+              </div>
+            ) : (
+              <MapContainer
+                center={mapCenter}
+                zoom={mapZoom}
+                className={`h-full w-full ${
+                  isFacilityManager && isAddingFacility
+                    ? "facility-adding-cursor"
+                    : ""
+                }`}
+                scrollWheelZoom
+                zoomControl={false}
+                doubleClickZoom
+                dragging
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
 
-              <MapController center={mapCenter} zoom={mapZoom} />
-              <ZoomControl position="topright" />
-              <FacilityPane />
+                <MapController center={mapCenter} zoom={mapZoom} />
+                <ZoomControl position="topright" />
+                <FacilityPane />
+                <FacilityAddListener
+                  enabled={isFacilityManager && isAddingFacility}
+                  onLocationPick={handleFacilityLocationSelect}
+                />
 
-              {showFacilities &&
-                visibleFacilities.map((facility) => (
+                {draftFacility && isFacilityManager && (
                   <Marker
-                    key={facility.id}
-                    position={[facility.lat, facility.lng]}
-                    icon={facility.icon}
+                    position={[draftFacility.lat, draftFacility.lng]}
+                    icon={createFacilityIcon(
+                      draftFacility.type ?? defaultFacilityType,
+                      draftFacility.status ?? FACILITY_STATUS_OPTIONS[0],
+                      true
+                    )}
                     pane="core-facilities"
-                    zIndexOffset={0}
-                  >
-                    <Tooltip direction="top" offset={[0, -18]}>
-                      <div className="text-xs font-semibold text-ui-text">{facility.name}</div>
-                      <div className="text-[10px] text-ui-subtext">{facility.type}</div>
-                    </Tooltip>
-                    <Popup className="facility-popup" closeButton={false}>
-                      <div className="space-y-1.5 text-sm">
-                        <div className="font-semibold text-ui-text leading-tight">{facility.name}</div>
-                        <div className="text-xs text-ui-subtext leading-snug">{facility.address}</div>
-                        {facility.hotline && facility.dialHref && (
-                          <a
-                            href={facility.dialHref}
-                            className="flex items-center gap-1 text-xs font-semibold text-brand-primary hover:text-brand-secondary"
-                          >
-                            <Phone className="h-3.5 w-3.5" strokeWidth={2} />
-                            {facility.hotline}
-                          </a>
-                        )}
-                        {facility.status && (
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${getFacilityStatusBadgeClass(facility.status)}`}
-                          >
-                            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-white/60" />
-                            {facility.status}
-                          </span>
-                        )}
-                        {facility.notes && (
-                          <p className="text-xs text-ui-subtext/90">{facility.notes}</p>
-                        )}
-                        {isFacilityManager && onFacilityUpdate && (
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            {facilityStatusOptions.map((option) => (
-                              <button
-                                key={option}
-                                type="button"
-                                onClick={(event) => {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  triggerHaptic(HAPTIC_TOGGLE);
-                                  onFacilityUpdate(facility.id, { status: option });
-                                }}
-                                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition ${
-                                  facility.status === option
-                                    ? "border-brand-primary bg-brand-primary text-white"
-                                    : "border-ui-border text-ui-subtext hover:text-ui-text"
-                                }`}
-                                aria-pressed={facility.status === option}
-                              >
-                                {option}
-                              </button>
-                            ))}
+                    interactive={false}
+                  />
+                )}
+
+                {showFacilities &&
+                  visibleFacilities.map((facility) => (
+                    <Marker
+                      key={facility.id}
+                      position={[facility.lat, facility.lng]}
+                      icon={createFacilityIcon(
+                        facility.type,
+                        facility.status,
+                        highlightedFacilityIds.has(facility.id)
+                      )}
+                      pane="core-facilities"
+                      zIndexOffset={0}
+                    >
+                      <Tooltip direction="top" offset={[0, -18]}>
+                        <div className="text-xs font-semibold text-ui-text">
+                          {facility.name}
+                        </div>
+                        <div className="text-[10px] text-ui-subtext">
+                          {facility.type}
+                        </div>
+                      </Tooltip>
+                      <Popup className="facility-popup" closeButton={false}>
+                        <div className="space-y-1.5 text-sm">
+                          <div className="font-semibold text-ui-text leading-tight">
+                            {facility.name}
                           </div>
-                        )}
+                          <div className="text-xs text-ui-subtext leading-snug">
+                            {facility.address}
+                          </div>
+                          {facility.hotline && facility.dialHref && (
+                            <a
+                              href={facility.dialHref}
+                              className="flex items-center gap-1 text-xs font-semibold text-brand-primary hover:text-brand-secondary"
+                            >
+                              <Phone className="h-3.5 w-3.5" strokeWidth={2} />
+                              {facility.hotline}
+                            </a>
+                          )}
+                          {facility.status && (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${getFacilityStatusBadgeClass(
+                                facility.status
+                              )}`}
+                            >
+                              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-white/60" />
+                              {facility.status}
+                            </span>
+                          )}
+                          {facility.notes && (
+                            <p className="text-xs text-ui-subtext/90">
+                              {facility.notes}
+                            </p>
+                          )}
+                          {isFacilityManager && (
+                            <div className="flex flex-col gap-1.5 pt-1">
+                              {onFacilityUpdate && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {facilityStatusOptions.map((option) => (
+                                    <button
+                                      key={option}
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        triggerHaptic(HAPTIC_TOGGLE);
+                                        onFacilityUpdate(facility.id, {
+                                          status: option,
+                                        });
+                                      }}
+                                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition ${
+                                        facility.status === option
+                                          ? "border-brand-primary bg-brand-primary text-white"
+                                          : "border-ui-border text-ui-subtext hover:text-ui-text"
+                                      }`}
+                                      aria-pressed={facility.status === option}
+                                    >
+                                      {option}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {onFacilityRemove && (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    handleFacilityDelete(facility);
+                                  }}
+                                  className="inline-flex items-center justify-center rounded-full border border-status-high/50 px-2 py-0.5 text-[10px] font-semibold text-status-high hover:bg-status-high/10"
+                                >
+                                  Remove facility
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+
+                {showHazards &&
+                  incidents.map((incident) => (
+                    <Circle
+                      key={`${incident.id}-hazard`}
+                      center={[incident.lat, incident.lng]}
+                      radius={(incident.impactRadiusKm ?? 0.6) * 1000}
+                      pathOptions={{
+                        color: getSeverityColor(incident.severity),
+                        fillColor: getSeverityColor(incident.severity),
+                        fillOpacity: 0.1,
+                        weight: incident.id === selectedIncidentId ? 2 : 1,
+                      }}
+                    />
+                  ))}
+
+                {incidents.map((incident) => (
+                  <Marker
+                    key={incident.id}
+                    position={[incident.lat, incident.lng]}
+                    icon={createIncidentIcon(
+                      incident.severity,
+                      incident.id === selectedIncidentId
+                    )}
+                    eventHandlers={{
+                      click: () => handleIncidentClick(incident.id),
+                    }}
+                  >
+                    <Tooltip direction="top" offset={[0, -8]}>
+                      <div className="text-xs font-semibold text-ui-text">
+                        {incident.type}
+                      </div>
+                      <div className="text-[10px] text-ui-subtext">
+                        {incident.citizenReports} citizen reports
+                      </div>
+                    </Tooltip>
+                    <Popup className="incident-popup" closeButton={false}>
+                      <div className="space-y-1 text-sm">
+                        <div className="font-semibold text-ui-text">
+                          {incident.type}
+                        </div>
+                        <div className="text-xs text-ui-subtext">
+                          {incident.location}
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            focusIncidentFromList(incident.id);
+                          }}
+                          className="mt-2 w-full rounded-lg bg-brand-primary px-2 py-1 text-xs font-semibold text-white"
+                        >
+                          Focus mission
+                        </button>
                       </div>
                     </Popup>
                   </Marker>
                 ))}
 
-              {showHazards &&
-                incidents.map((incident) => (
-                  <Circle
-                    key={`${incident.id}-hazard`}
-                    center={[incident.lat, incident.lng]}
-                    radius={(incident.impactRadiusKm ?? 0.6) * 1000}
-                    pathOptions={{
-                      color: getSeverityColor(incident.severity),
-                      fillColor: getSeverityColor(incident.severity),
-                      fillOpacity: 0.1,
-                      weight: incident.id === selectedIncidentId ? 2 : 1,
-                    }}
-                  />
-                ))}
-
-              {incidents.map((incident) => (
-                <Marker
-                  key={incident.id}
-                  position={[incident.lat, incident.lng]}
-                  icon={createIncidentIcon(
-                    incident.severity,
-                    incident.id === selectedIncidentId
-                  )}
-                  eventHandlers={{
-                    click: () => handleIncidentClick(incident.id),
-                  }}
-                >
-                  <Tooltip direction="top" offset={[0, -8]}>
-                    <div className="text-xs font-semibold text-ui-text">
-                      {incident.type}
-                    </div>
-                    <div className="text-[10px] text-ui-subtext">
-                      {incident.citizenReports} citizen reports
-                    </div>
-                  </Tooltip>
-                  <Popup className="incident-popup" closeButton={false}>
-                    <div className="space-y-1 text-sm">
-                      <div className="font-semibold text-ui-text">
-                        {incident.type}
-                      </div>
-                      <div className="text-xs text-ui-subtext">
-                        {incident.location}
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          focusIncidentFromList(incident.id);
-                        }}
-                        className="mt-2 w-full rounded-lg bg-brand-primary px-2 py-1 text-xs font-semibold text-white"
-                      >
-                        Focus mission
-                      </button>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
-
-              {showResponders &&
-                responderMarkers.map((responder) => (
-                  <Marker
-                    key={responder.id}
-                    position={[responder.lat, responder.lng]}
-                    icon={createResponderIcon(responder.status)}
-                  >
-                    <Tooltip direction="top" offset={[0, -4]}>
-                      <div className="text-xs font-semibold text-ui-text">
-                        {responder.name}
-                      </div>
-                      <div className="text-[10px] text-ui-subtext">
-                        {responder.status}
-                      </div>
-                    </Tooltip>
-                  </Marker>
-                ))}
-            </MapContainer>
-          )}
-
-          <div className="pointer-events-none absolute bottom-3 right-3 flex flex-col items-end gap-2 text-[10px] font-medium text-ui-subtext/90">
-            <LegendDot color="bg-red-500" label="High" />
-            <LegendDot color="bg-orange-500" label="Medium" />
-            <LegendDot color="bg-blue-500" label="Low" />
-            {showHazards && (
-              <LegendDot color="bg-brand-primary/20 border border-brand-primary" label="Hazard" />
+                {showResponders &&
+                  responderMarkers.map((responder) => (
+                    <Marker
+                      key={responder.id}
+                      position={[responder.lat, responder.lng]}
+                      icon={createResponderIcon(responder.status)}
+                    >
+                      <Tooltip direction="top" offset={[0, -4]}>
+                        <div className="text-xs font-semibold text-ui-text">
+                          {responder.name}
+                        </div>
+                        <div className="text-[10px] text-ui-subtext">
+                          {responder.status}
+                        </div>
+                      </Tooltip>
+                    </Marker>
+                  ))}
+              </MapContainer>
             )}
-            {showFacilities &&
-              facilityTypes.map((type) => {
-                const meta = FACILITY_TYPE_META[type] ?? FACILITY_TYPE_META.__fallback;
-                return (
-                  <LegendDot
-                    key={`facility-${type}`}
-                    label={type}
-                    style={{ backgroundColor: meta.color }}
-                  />
-                );
-              })}
-          </div>
 
-          {isFullScreen && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-3">
-              <div className="pointer-events-auto max-h-[60vh] space-y-3 overflow-y-auto rounded-2xl bg-ui-surface/95 p-3 shadow-2xl backdrop-blur-md">
-                <FocusIncidentCard
-                  incident={selectedIncident}
-                  availableResponders={availableResponders}
-                  onAssign={handleAssignResponder}
-                  variant="sheet"
+            {isFacilityManager && isAddingFacility && !draftFacility && (
+              <div className="pointer-events-none absolute inset-x-0 top-4 z-[1200] flex justify-center px-4">
+                <span className="pointer-events-auto rounded-full bg-brand-primary px-4 py-2 text-xs font-semibold text-white shadow-lg">
+                  Click (or tap) on the map to place a facility
+                </span>
+              </div>
+            )}
+
+            {draftFacility && isFacilityManager && (
+              <div className="pointer-events-none absolute inset-x-0 top-4 z-[1300] flex justify-center px-4">
+                <FacilityCreationForm
+                  draft={draftFacility}
+                  typeOptions={facilityFormTypeOptions}
+                  statusOptions={facilityStatusOptions}
+                  onSubmit={handleFacilityFormSubmit}
+                  onCancel={handleCancelAddFacility}
                 />
-                {sortedIncidents.length > 1 && (
-                  <IncidentQueue
-                    incidents={sortedIncidents}
-                    selectedId={selectedIncidentId}
-                    onSelect={focusIncidentFromList}
+              </div>
+            )}
+
+            <div className="pointer-events-none absolute bottom-3 right-3 flex flex-col items-end gap-2 text-[10px] font-medium text-ui-subtext/90">
+              <LegendDot color="bg-red-500" label="High" />
+              <LegendDot color="bg-orange-500" label="Medium" />
+              <LegendDot color="bg-blue-500" label="Low" />
+              {showHazards && (
+                <LegendDot
+                  color="bg-brand-primary/20 border border-brand-primary"
+                  label="Hazard"
+                />
+              )}
+              {showFacilities &&
+                facilityTypes.map((type) => {
+                  const meta =
+                    FACILITY_TYPE_META[type] ?? FACILITY_TYPE_META.__fallback;
+                  return (
+                    <LegendDot
+                      key={`facility-${type}`}
+                      label={type}
+                      style={{ backgroundColor: meta.color }}
+                    />
+                  );
+                })}
+              {showFacilities && nearestFacilities.length > 0 && (
+                <LegendDot
+                  label="Nearest highlight"
+                  style={{
+                    backgroundColor: "#ffffff",
+                    boxShadow: "0 0 0 2px rgba(34, 197, 94, 0.45)",
+                  }}
+                />
+              )}
+            </div>
+
+            {isFullScreen && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-3">
+                <div className="pointer-events-auto max-h-[60vh] space-y-3 overflow-y-auto rounded-2xl bg-ui-surface/95 p-3 shadow-2xl backdrop-blur-md">
+                  <FocusIncidentCard
+                    incident={selectedIncident}
+                    availableResponders={availableResponders}
+                    onAssign={handleAssignResponder}
+                    nearestFacilities={nearestFacilities}
+                    onFacilityFocus={focusFacility}
                     variant="sheet"
                   />
-                )}
+                  {sortedIncidents.length > 1 && (
+                    <IncidentQueue
+                      incidents={sortedIncidents}
+                      selectedId={selectedIncidentId}
+                      onSelect={focusIncidentFromList}
+                      variant="sheet"
+                    />
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-
-        {!isFullScreen && (
-          <div className="space-y-4">
-            <FocusIncidentCard
-              incident={selectedIncident}
-              availableResponders={availableResponders}
-              onAssign={handleAssignResponder}
-            />
-
-            {sortedIncidents.length > 1 && (
-              <IncidentQueue
-                incidents={sortedIncidents}
-                selectedId={selectedIncidentId}
-                onSelect={focusIncidentFromList}
-              />
             )}
           </div>
-        )}
+
+          {!isFullScreen && (
+            <aside className="space-y-4 lg:sticky lg:top-24">
+              <FocusIncidentCard
+                incident={selectedIncident}
+                availableResponders={availableResponders}
+                onAssign={handleAssignResponder}
+                nearestFacilities={nearestFacilities}
+                onFacilityFocus={focusFacility}
+              />
+
+              {sortedIncidents.length > 1 && (
+                <IncidentQueue
+                  incidents={sortedIncidents}
+                  selectedId={selectedIncidentId}
+                  onSelect={focusIncidentFromList}
+                />
+              )}
+            </aside>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 function TogglePill({ active, icon: Icon, label, onClick }) {
+  const stateClass = active
+    ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
+    : "border-ui-border bg-ui-background text-ui-subtext hover:text-ui-text";
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm transition ${
-        active
-          ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
-          : "border-ui-border bg-ui-background text-ui-subtext"
-      }`}
+      className={`group flex items-center justify-center rounded-full border transition ${stateClass} h-9 w-9 lg:h-auto lg:min-h-[36px] lg:w-auto lg:justify-start lg:gap-2 lg:px-3 lg:py-1.5`}
       aria-pressed={active}
       aria-label={label}
+      title={label}
     >
       <Icon className="h-4 w-4" />
+      <span className="hidden text-xs font-semibold lg:inline">{label}</span>
     </button>
+  );
+}
+function FacilityAddListener({ enabled, onLocationPick }) {
+  useMapEvents({
+    click(event) {
+      if (!enabled || !onLocationPick) return;
+      onLocationPick({ lat: event.latlng.lat, lng: event.latlng.lng });
+    },
+  });
+  return null;
+}
+
+function FacilityCreationForm({
+  draft,
+  typeOptions = [],
+  statusOptions = [],
+  onSubmit,
+  onCancel,
+}) {
+  if (!draft) return null;
+
+  const mergedTypeOptions = useMemo(() => {
+    if (typeOptions.length) {
+      return typeOptions;
+    }
+    return ["Hospital", "Police Station", "Fire Station", "Evacuation Center"];
+  }, [typeOptions]);
+  const mergedStatusOptions = useMemo(() => {
+    return statusOptions.length ? statusOptions : FACILITY_STATUS_OPTIONS;
+  }, [statusOptions]);
+
+  const [formData, setFormData] = useState(() => ({
+    type: draft.type ?? mergedTypeOptions[0] ?? "Hospital",
+    name: "",
+    address: "",
+    hotline: "",
+    status: draft.status ?? mergedStatusOptions[0] ?? "Open",
+    notes: "",
+  }));
+
+  useEffect(() => {
+    setFormData({
+      type: draft.type ?? mergedTypeOptions[0] ?? "Hospital",
+      name: "",
+      address: "",
+      hotline: "",
+      status: draft.status ?? mergedStatusOptions[0] ?? "Open",
+      notes: "",
+    });
+  }, [draft, mergedTypeOptions, mergedStatusOptions]);
+
+  const handleChange = (field) => (event) => {
+    const { value } = event.target;
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!onSubmit) return;
+    onSubmit({
+      ...formData,
+      coordinates: { lat: draft.lat, lng: draft.lng },
+    });
+  };
+
+  const handleCancel = () => {
+    if (onCancel) {
+      onCancel();
+    }
+  };
+
+  return (
+    <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-ui-border bg-ui-surface/95 p-4 shadow-xl">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-ui-text">
+            Add core facility
+          </h3>
+          <p className="text-[11px] text-ui-subtext">
+            Lat {draft.lat.toFixed(5)}, Lng {draft.lng.toFixed(5)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleCancel}
+          className="rounded-full border border-ui-border px-2 py-0.5 text-[10px] font-semibold text-ui-subtext hover:text-status-high"
+        >
+          Cancel
+        </button>
+      </div>
+      <form className="mt-3 space-y-3" onSubmit={handleSubmit}>
+        <div className="grid gap-2">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ui-subtext">
+            Facility type
+          </label>
+          <input
+            list="facility-type-options"
+            value={formData.type}
+            onChange={handleChange("type")}
+            placeholder="Hospital"
+            className="w-full rounded-lg border border-ui-border bg-ui-background px-3 py-2 text-sm text-ui-text"
+            required
+          />
+          <datalist id="facility-type-options">
+            {mergedTypeOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+        </div>
+        <div className="grid gap-2">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ui-subtext">
+            Name
+          </label>
+          <input
+            value={formData.name}
+            onChange={handleChange("name")}
+            placeholder="Facility name"
+            className="w-full rounded-lg border border-ui-border bg-ui-background px-3 py-2 text-sm text-ui-text"
+            required
+          />
+        </div>
+        <div className="grid gap-2">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ui-subtext">
+            Address / Landmark
+          </label>
+          <input
+            value={formData.address}
+            onChange={handleChange("address")}
+            placeholder="Street, barangay, nearby marker"
+            className="w-full rounded-lg border border-ui-border bg-ui-background px-3 py-2 text-sm text-ui-text"
+            required
+          />
+        </div>
+        <div className="grid gap-2">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ui-subtext">
+            Hotline
+          </label>
+          <input
+            value={formData.hotline}
+            onChange={handleChange("hotline")}
+            placeholder="+63 900 000 0000"
+            className="w-full rounded-lg border border-ui-border bg-ui-background px-3 py-2 text-sm text-ui-text"
+          />
+        </div>
+        <div className="grid gap-2">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ui-subtext">
+            Status
+          </label>
+          <select
+            value={formData.status}
+            onChange={handleChange("status")}
+            className="w-full rounded-lg border border-ui-border bg-ui-background px-3 py-2 text-sm text-ui-text"
+          >
+            {mergedStatusOptions.map((status) => (
+              <option key={status}>{status}</option>
+            ))}
+          </select>
+        </div>
+        <div className="grid gap-2">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ui-subtext">
+            Notes
+          </label>
+          <textarea
+            value={formData.notes}
+            onChange={handleChange("notes")}
+            rows={3}
+            className="w-full rounded-lg border border-ui-border bg-ui-background px-3 py-2 text-sm text-ui-text"
+            placeholder="Optional context (capacity, supplies, etc.)"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="rounded-lg border border-ui-border px-3 py-1.5 text-sm font-semibold text-ui-subtext hover:text-status-high"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="rounded-lg bg-brand-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-secondary"
+          >
+            Save facility
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -1000,7 +1522,11 @@ function LegendDot({ color = "", label, style, icon = null }) {
   return (
     <span className="flex items-center gap-1">
       <span className={classes.join(" ").trim()} style={style}>
-        {icon ? icon : outline ? <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" /> : null}
+        {icon ? (
+          icon
+        ) : outline ? (
+          <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" />
+        ) : null}
       </span>
       {label}
     </span>
@@ -1016,15 +1542,26 @@ function FocusStat({ icon: Icon, iconClassName = "", label, value, badge }) {
         <Icon className="h-4 w-4" />
       </span>
       <div className="flex flex-col leading-tight">
-        <span className="text-[10px] uppercase tracking-wide text-ui-subtext">{label}</span>
+        <span className="text-[10px] uppercase tracking-wide text-ui-subtext">
+          {label}
+        </span>
         <span className="text-sm font-semibold text-ui-text">{value}</span>
-        <span className="text-[10px] font-medium text-ui-subtext/80">{badge}</span>
+        <span className="text-[10px] font-medium text-ui-subtext/80">
+          {badge}
+        </span>
       </div>
     </div>
   );
 }
 
-function FocusIncidentCard({ incident, availableResponders, onAssign, variant = "default" }) {
+function FocusIncidentCard({
+  incident,
+  availableResponders,
+  onAssign,
+  nearestFacilities = [],
+  onFacilityFocus,
+  variant = "default",
+}) {
   const baseClass =
     variant === "sheet"
       ? "space-y-3 rounded-2xl border border-ui-border/60 bg-ui-surface/95 p-3 shadow-md"
@@ -1042,7 +1579,9 @@ function FocusIncidentCard({ incident, availableResponders, onAssign, variant = 
     <div className={baseClass}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-base font-semibold text-ui-text">{incident.type}</div>
+          <div className="truncate text-base font-semibold text-ui-text">
+            {incident.type}
+          </div>
           <div className="mt-1 flex items-center gap-1 text-xs text-ui-subtext">
             <MapPinIcon className="h-4 w-4 text-brand-primary" />
             <span className="truncate">{incident.location}</span>
@@ -1054,14 +1593,22 @@ function FocusIncidentCard({ incident, availableResponders, onAssign, variant = 
       </div>
 
       <div className="grid grid-cols-3 gap-2 text-center text-xs font-medium">
-        <MiniBadge icon={SignalHigh} value={`${incident.citizenReports}`} label="Reports" />
+        <MiniBadge
+          icon={SignalHigh}
+          value={`${incident.citizenReports}`}
+          label="Reports"
+        />
         <MiniBadge
           icon={Activity}
           value={formatHazardScore(incident.aiHazardScore)}
           label={`${incident.riskBand} risk`}
           accent={getRiskColor(incident.riskBand)}
         />
-        <MiniBadge icon={Target} value={`${incident.impactRadiusKm.toFixed(1)} km`} label="Radius" />
+        <MiniBadge
+          icon={Target}
+          value={`${incident.impactRadiusKm.toFixed(1)} km`}
+          label="Radius"
+        />
       </div>
 
       {incident.aiSummary && (
@@ -1076,9 +1623,84 @@ function FocusIncidentCard({ incident, availableResponders, onAssign, variant = 
         </div>
       )}
 
+      {nearestFacilities.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-ui-subtext">
+            Nearest critical sites
+          </p>
+          <div className="space-y-1.5">
+            {nearestFacilities.map((facility) => {
+              const meta =
+                FACILITY_TYPE_META[facility.type] ??
+                FACILITY_TYPE_META.__fallback;
+              return (
+                <div
+                  key={facility.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-ui-border bg-white/90 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="inline-flex h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: meta.color }}
+                      />
+                      <p className="truncate text-sm font-semibold text-ui-text">
+                        {facility.name}
+                      </p>
+                    </div>
+                    <p className="text-xs text-ui-subtext">
+                      {facility.type}
+                      {facility.distanceKm != null && (
+                        <>
+                          {" - "}
+                          {formatDistanceKm(facility.distanceKm)}
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    {facility.status && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getFacilityStatusBadgeClass(
+                          facility.status
+                        )}`}
+                      >
+                        {facility.status}
+                      </span>
+                    )}
+                    <div className="flex gap-1">
+                      {facility.dialHref && (
+                        <a
+                          href={facility.dialHref}
+                          className="inline-flex items-center gap-1 rounded-full bg-brand-primary/10 px-2 py-0.5 text-[10px] font-semibold text-brand-primary hover:bg-brand-primary hover:text-white"
+                        >
+                          <Phone className="h-3 w-3" strokeWidth={2} />
+                          Call
+                        </a>
+                      )}
+                      {onFacilityFocus && (
+                        <button
+                          type="button"
+                          onClick={() => onFacilityFocus(facility.id)}
+                          className="inline-flex items-center gap-1 rounded-full border border-ui-border px-2 py-0.5 text-[10px] font-semibold text-ui-subtext hover:text-brand-primary"
+                        >
+                          Focus
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {availableResponders.length > 0 && (
         <div className="space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-ui-subtext">Nearby teams</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-ui-subtext">
+            Nearby teams
+          </p>
           <div className="space-y-2">
             {availableResponders.slice(0, 4).map((responder) => (
               <div
@@ -1086,10 +1708,14 @@ function FocusIncidentCard({ incident, availableResponders, onAssign, variant = 
                 className="flex items-center justify-between gap-3 rounded-xl border border-ui-border bg-white/80 px-3 py-2"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ui-text">{responder.name}</p>
+                  <p className="truncate text-sm font-semibold text-ui-text">
+                    {responder.name}
+                  </p>
                   <p className="text-xs text-ui-subtext">
-                    {responder.status} · {formatDistanceKm(responder.distanceKm)}
-                    {responder.etaMinutes != null && ` · ${responder.etaMinutes} min`}
+                    {responder.status} ·{" "}
+                    {formatDistanceKm(responder.distanceKm)}
+                    {responder.etaMinutes != null &&
+                      ` · ${responder.etaMinutes} min`}
                   </p>
                 </div>
                 <button
@@ -1120,12 +1746,19 @@ function MiniBadge({ icon: Icon, value, label, accent }) {
         <Icon className="h-4 w-4" />
       </span>
       <span className="text-sm font-semibold text-ui-text">{value}</span>
-      <span className="text-[10px] uppercase tracking-wide text-ui-subtext">{label}</span>
+      <span className="text-[10px] uppercase tracking-wide text-ui-subtext">
+        {label}
+      </span>
     </div>
   );
 }
 
-function IncidentQueue({ incidents, selectedId, onSelect, variant = "default" }) {
+function IncidentQueue({
+  incidents,
+  selectedId,
+  onSelect,
+  variant = "default",
+}) {
   const baseClass =
     variant === "sheet"
       ? "space-y-2 rounded-2xl border border-ui-border/60 bg-ui-surface/95 p-3 shadow-md"
