@@ -21,6 +21,12 @@ import {
   AlertTriangle,
   SignalHigh,
   Target,
+  Building2,
+  Hospital,
+  Shield,
+  Flame,
+  Home,
+  Phone,
 } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import "./MapView.css";
@@ -140,6 +146,109 @@ function calculateDistanceKm(source, target) {
   return EARTH_RADIUS_KM * c;
 }
 
+const FACILITY_STATUS_OPTIONS = ["Open", "At Capacity", "Full"];
+
+const FACILITY_MARKER_GLYPHS = {
+  Hospital:
+    '<svg class="facility-marker-icon" viewBox="0 0 24 24"><path fill="white" d="M10 3h4v6h6v4h-6v8h-4v-8H4v-4h6z"/></svg>',
+  "Police Station":
+    '<svg class="facility-marker-icon" viewBox="0 0 24 24"><path fill="white" d="M12 2l7 3v5c0 5.5-3.4 10.6-7 12-3.6-1.4-7-6.5-7-12V5z"/></svg>',
+  "Fire Station":
+    '<svg class="facility-marker-icon" viewBox="0 0 24 24"><path fill="white" d="M12 2c2.4 2.3 4 4.8 4 7.3 0 3.3-2.4 5-4 6.7-1.6-1.7-4-3.4-4-6.7 0-2.5 1.6-5 4-7.3z"/></svg>',
+  "Evacuation Center":
+    '<svg class="facility-marker-icon" viewBox="0 0 24 24"><path fill="white" d="M12 4l8 7h-2v9h-4v-5h-4v5H6v-9H4z"/></svg>',
+};
+
+const FACILITY_TYPE_META = {
+  Hospital: {
+    color: "#22C55E",
+    markerHtml: FACILITY_MARKER_GLYPHS.Hospital,
+    icon: Hospital,
+  },
+  "Police Station": {
+    color: "#3B82F6",
+    markerHtml: FACILITY_MARKER_GLYPHS["Police Station"],
+    icon: Shield,
+  },
+  "Fire Station": {
+    color: "#EF4444",
+    markerHtml: FACILITY_MARKER_GLYPHS["Fire Station"],
+    icon: Flame,
+  },
+  "Evacuation Center": {
+    color: "#F97316",
+    markerHtml: FACILITY_MARKER_GLYPHS["Evacuation Center"],
+    icon: Home,
+  },
+  __fallback: {
+    color: "#6366F1",
+    markerHtml: '<span class="facility-marker-glyph">F</span>',
+    icon: Building2,
+  },
+};
+
+function getFacilityStatusAccent(status, fallbackColor) {
+  if (!status) return fallbackColor;
+  const normalized = status.toLowerCase();
+  if (normalized.includes("full")) {
+    return "#DC2626";
+  }
+  if (normalized.includes("capacity")) {
+    return "#F97316";
+  }
+  if (normalized.includes("closed")) {
+    return "#6B7280";
+  }
+  return fallbackColor;
+}
+
+function createFacilityIcon(type, status) {
+  const meta = FACILITY_TYPE_META[type] ?? FACILITY_TYPE_META.__fallback;
+  const accent = getFacilityStatusAccent(status, meta.color);
+  const glyphHtml = meta.markerHtml ?? '<span class="facility-marker-glyph">F</span>';
+  return L.divIcon({
+    className: "custom-div-icon facility-marker",
+    html: `<div class="facility-marker-pin" style="--facility-color:${meta.color};--facility-ring:${accent};">${glyphHtml}</div>`,
+    iconSize: [30, 36],
+    iconAnchor: [15, 32],
+    popupAnchor: [0, -30],
+  });
+}
+
+function getFacilityStatusBadgeClass(status) {
+  if (!status) {
+    return "bg-ui-border text-ui-subtext";
+  }
+  const normalized = status.toLowerCase();
+  if (normalized.includes("full")) {
+    return "border border-status-high/40 bg-status-high/15 text-status-high";
+  }
+  if (normalized.includes("capacity")) {
+    return "border border-status-medium/40 bg-status-medium/15 text-status-medium";
+  }
+  return "border border-status-low/40 bg-status-low/15 text-status-low";
+}
+
+function toDialHref(value) {
+  if (typeof value !== "string") return null;
+  const digits = value.replace(/[^+\d]/g, "");
+  return digits.length > 3 ? `tel:${digits}` : null;
+}
+
+function FacilityPane() {
+  const mapInstance = useMap();
+
+  useEffect(() => {
+    if (!mapInstance) return;
+    if (!mapInstance.getPane("core-facilities")) {
+      const pane = mapInstance.createPane("core-facilities");
+      pane.style.zIndex = "550";
+    }
+  }, [mapInstance]);
+
+  return null;
+}
+
 const formatHazardScore = (value) =>
   `${Math.round(Math.min(Math.max(value ?? 0, 0), 1) * 100)}%`;
 
@@ -150,7 +259,10 @@ export default function MapView({
   activeIncidents = [],
   onIncidentSelect,
   responders = [],
+  coreFacilities = [],
+  viewerRole = "Citizen",
   onAssign,
+  onFacilityUpdate,
 }) {
   const incidents = useMemo(
     () =>
@@ -219,6 +331,17 @@ export default function MapView({
   const [showResponders, setShowResponders] = useState(true);
   const [showHazards, setShowHazards] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [showFacilities, setShowFacilities] = useState(true);
+  const [facilityVisibility, setFacilityVisibility] = useState(() => {
+    const visibility = {};
+    coreFacilities.forEach((facility) => {
+      if (facility?.type) {
+        visibility[facility.type] = true;
+      }
+    });
+    return visibility;
+  });
+  const isFacilityManager = viewerRole?.toLowerCase().includes("lgu");
 
   const triggerHaptic = (pattern = HAPTIC_SHORT) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -274,6 +397,85 @@ export default function MapView({
         .filter(Boolean),
     [responders]
   );
+
+  const facilityTypes = useMemo(() => {
+    const unique = new Set();
+    coreFacilities.forEach((facility) => {
+      if (facility?.type) {
+        unique.add(facility.type);
+      }
+    });
+    return Array.from(unique);
+  }, [coreFacilities]);
+
+  useEffect(() => {
+    if (!facilityTypes.length) {
+      setFacilityVisibility({});
+      return;
+    }
+
+    setFacilityVisibility((prev) => {
+      const next = {};
+      facilityTypes.forEach((type) => {
+        next[type] = prev?.[type] ?? true;
+      });
+      const prevKeys = Object.keys(prev || {});
+      const sameKeyLength = prevKeys.length === facilityTypes.length;
+      if (sameKeyLength && facilityTypes.every((type) => prevKeys.includes(type))) {
+        let changed = false;
+        facilityTypes.forEach((type) => {
+          if (next[type] !== prev[type]) {
+            changed = true;
+          }
+        });
+        if (!changed) {
+          return prev;
+        }
+      }
+      return next;
+    });
+  }, [facilityTypes]);
+
+  const facilityMarkers = useMemo(
+    () =>
+      coreFacilities
+        .map((facility) => {
+          if (!facility) return null;
+          const coordinates = facility.coordinates || {};
+          const lat =
+            typeof coordinates.lat === "number"
+              ? coordinates.lat
+              : Number(coordinates.lat);
+          const lng =
+            typeof coordinates.lng === "number"
+              ? coordinates.lng
+              : Number(coordinates.lng);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return null;
+          }
+          return {
+            ...facility,
+            lat,
+            lng,
+            icon: createFacilityIcon(facility.type, facility.status),
+            dialHref: toDialHref(facility.hotline),
+          };
+        })
+        .filter(Boolean),
+    [coreFacilities]
+  );
+
+  const visibleFacilities = useMemo(
+    () =>
+      facilityMarkers.filter((facility) => {
+        if (!showFacilities) return false;
+        if (!facility.type) return true;
+        return facilityVisibility[facility.type] ?? true;
+      }),
+    [facilityMarkers, facilityVisibility, showFacilities]
+  );
+  const facilityStatusOptions = FACILITY_STATUS_OPTIONS;
+  const facilityRoleLabel = isFacilityManager ? "Manage" : "View only";
 
   const metrics = useMemo(() => {
     const totalReports = incidents.reduce(
@@ -355,6 +557,19 @@ export default function MapView({
 
   const mapHeight = isFullScreen ? "100%" : "min(60vh, 360px)";
 
+  const handleToggleFacilities = () => {
+    triggerHaptic();
+    setShowFacilities((prev) => !prev);
+  };
+
+  const handleFacilityTypeToggle = (type) => {
+    triggerHaptic();
+    setFacilityVisibility((prev) => ({
+      ...prev,
+      [type]: !(prev?.[type] ?? true),
+    }));
+  };
+
   const handleToggleHazards = () => {
     triggerHaptic();
     setShowHazards((prev) => !prev);
@@ -390,6 +605,12 @@ export default function MapView({
           </div>
           <div className="flex items-center gap-2">
             <TogglePill
+              active={showFacilities}
+              icon={Building2}
+              label="Toggle core facilities"
+              onClick={handleToggleFacilities}
+            />
+            <TogglePill
               active={showHazards}
               icon={Radar}
               label="Toggle hazard rings"
@@ -419,6 +640,41 @@ export default function MapView({
             </button>
           </div>
         </div>
+
+        {showFacilities && facilityMarkers.length > 0 && (
+          <div className="rounded-2xl border border-ui-border/60 bg-ui-background px-3 py-2">
+            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-ui-subtext">
+              <span>Core Facilities</span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[9px] ${
+                  isFacilityManager
+                    ? "bg-status-low/15 text-status-low"
+                    : "bg-ui-border text-ui-subtext"
+                }`}
+              >
+                {facilityRoleLabel}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {facilityTypes.map((type) => {
+                const meta = FACILITY_TYPE_META[type] ?? FACILITY_TYPE_META.__fallback;
+                return (
+                  <FacilityFilterChip
+                    key={type}
+                    icon={meta.icon}
+                    color={meta.color}
+                    label={type}
+                    active={facilityVisibility[type] ?? true}
+                    onClick={() => handleFacilityTypeToggle(type)}
+                  />
+                );
+              })}
+            </div>
+            {facilityMarkers.length > 0 && visibleFacilities.length === 0 && (
+              <p className="mt-2 text-[11px] text-ui-subtext">No facilities match the current filters.</p>
+            )}
+          </div>
+        )}
 
         {!isFullScreen && (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -475,6 +731,73 @@ export default function MapView({
 
               <MapController center={mapCenter} zoom={mapZoom} />
               <ZoomControl position="topright" />
+              <FacilityPane />
+
+              {showFacilities &&
+                visibleFacilities.map((facility) => (
+                  <Marker
+                    key={facility.id}
+                    position={[facility.lat, facility.lng]}
+                    icon={facility.icon}
+                    pane="core-facilities"
+                    zIndexOffset={0}
+                  >
+                    <Tooltip direction="top" offset={[0, -18]}>
+                      <div className="text-xs font-semibold text-ui-text">{facility.name}</div>
+                      <div className="text-[10px] text-ui-subtext">{facility.type}</div>
+                    </Tooltip>
+                    <Popup className="facility-popup" closeButton={false}>
+                      <div className="space-y-1.5 text-sm">
+                        <div className="font-semibold text-ui-text leading-tight">{facility.name}</div>
+                        <div className="text-xs text-ui-subtext leading-snug">{facility.address}</div>
+                        {facility.hotline && facility.dialHref && (
+                          <a
+                            href={facility.dialHref}
+                            className="flex items-center gap-1 text-xs font-semibold text-brand-primary hover:text-brand-secondary"
+                          >
+                            <Phone className="h-3.5 w-3.5" strokeWidth={2} />
+                            {facility.hotline}
+                          </a>
+                        )}
+                        {facility.status && (
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${getFacilityStatusBadgeClass(facility.status)}`}
+                          >
+                            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-white/60" />
+                            {facility.status}
+                          </span>
+                        )}
+                        {facility.notes && (
+                          <p className="text-xs text-ui-subtext/90">{facility.notes}</p>
+                        )}
+                        {isFacilityManager && onFacilityUpdate && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {facilityStatusOptions.map((option) => (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  triggerHaptic(HAPTIC_TOGGLE);
+                                  onFacilityUpdate(facility.id, { status: option });
+                                }}
+                                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition ${
+                                  facility.status === option
+                                    ? "border-brand-primary bg-brand-primary text-white"
+                                    : "border-ui-border text-ui-subtext hover:text-ui-text"
+                                }`}
+                                aria-pressed={facility.status === option}
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
 
               {showHazards &&
                 incidents.map((incident) => (
@@ -561,6 +884,17 @@ export default function MapView({
             {showHazards && (
               <LegendDot color="bg-brand-primary/20 border border-brand-primary" label="Hazard" />
             )}
+            {showFacilities &&
+              facilityTypes.map((type) => {
+                const meta = FACILITY_TYPE_META[type] ?? FACILITY_TYPE_META.__fallback;
+                return (
+                  <LegendDot
+                    key={`facility-${type}`}
+                    label={type}
+                    style={{ backgroundColor: meta.color }}
+                  />
+                );
+              })}
           </div>
 
           {isFullScreen && (
@@ -625,16 +959,48 @@ function TogglePill({ active, icon: Icon, label, onClick }) {
   );
 }
 
-function LegendDot({ color, label }) {
+function FacilityFilterChip({ icon: Icon, color, label, active, onClick }) {
+  const baseClasses =
+    "flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition";
+  const stateClasses = active
+    ? "text-white shadow-sm"
+    : "bg-ui-background text-ui-subtext hover:text-ui-text";
+  const style = active
+    ? { backgroundColor: color, borderColor: color }
+    : { borderColor: color, color };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${baseClasses} ${stateClasses}`}
+      style={style}
+      aria-pressed={active}
+    >
+      {Icon && (
+        <Icon
+          className="h-3.5 w-3.5"
+          strokeWidth={2}
+          style={{ color: active ? "#ffffff" : color }}
+        />
+      )}
+      <span className="leading-none">{label}</span>
+    </button>
+  );
+}
+
+function LegendDot({ color = "", label, style, icon = null }) {
   const outline = color.includes("border");
+  const classes = [
+    "inline-flex h-2.5 w-2.5 items-center justify-center rounded-full",
+  ];
+  if (color) {
+    classes.push(color);
+  }
   return (
     <span className="flex items-center gap-1">
-      <span
-        className={`inline-flex h-2.5 w-2.5 items-center justify-center rounded-full ${
-          outline ? color : `${color}`
-        }`}
-      >
-        {outline && <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" />}
+      <span className={classes.join(" ").trim()} style={style}>
+        {icon ? icon : outline ? <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" /> : null}
       </span>
       {label}
     </span>

@@ -114,7 +114,10 @@ const pickResponderForIncident = (incident, responderList) => {
     if (responder.currentAssignment) {
       return;
     }
-    const distanceKm = computeDistanceKm(incident.coordinates, responder.coordinates);
+    const distanceKm = computeDistanceKm(
+      incident.coordinates,
+      responder.coordinates
+    );
     const candidate = {
       responder,
       distanceKm: Number.isFinite(distanceKm) ? distanceKm : Infinity,
@@ -353,15 +356,65 @@ export default function Dashboard() {
     },
   ];
 
+  const initialFacilities = [
+    {
+      id: "FAC-001",
+      type: "Hospital",
+      name: "Marikina Valley Medical Center",
+      address: "Sumulong Hwy, Brgy. Sto. Nino",
+      hotline: "+63 2 9485 6789",
+      status: "Open",
+      notes: "Capable of handling mass casualty triage",
+      coordinates: { lat: 14.6689, lng: 121.0489 },
+      lastUpdated: "2025-09-22T04:30:00Z",
+    },
+    {
+      id: "FAC-002",
+      type: "Police Station",
+      name: "Marikina Central Police HQ",
+      address: "JP Rizal St, Brgy. Sta. Elena",
+      hotline: "(02) 571-1234",
+      status: "Open",
+      notes: "Rapid deployment unit on standby",
+      coordinates: { lat: 14.6524, lng: 121.0431 },
+      lastUpdated: "2025-09-22T03:55:00Z",
+    },
+    {
+      id: "FAC-003",
+      type: "Fire Station",
+      name: "Bureau of Fire Protection - Marikina",
+      address: "P. Burgos St, Brgy. San Roque",
+      hotline: "(02) 646-2000",
+      status: "Open",
+      notes: "Two pumpers available, one aerial ladder",
+      coordinates: { lat: 14.6558, lng: 121.0438 },
+      lastUpdated: "2025-09-22T03:10:00Z",
+    },
+    {
+      id: "FAC-004",
+      type: "Evacuation Center",
+      name: "Malanday Elementary Gymnasium",
+      address: "P. Herrera St, Brgy. Malanday",
+      hotline: "+63 917 567 4455",
+      status: "At Capacity",
+      notes: "Requesting additional food packs",
+      coordinates: { lat: 14.6812, lng: 121.0405 },
+      lastUpdated: "2025-09-22T04:05:00Z",
+    },
+  ];
+
   const [activeIncidents, setActiveIncidents] = useState(
     initialIncidents.map(enrichIncidentWithGeo)
   );
   const [responders, setResponders] = useState(initialResponders);
+  const [coreFacilities, setCoreFacilities] = useState(initialFacilities);
   const [showAllIncidents, setShowAllIncidents] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [typeFilter, setTypeFilter] = useState("All");
   const [severityFilter, setSeverityFilter] = useState("All");
   const [viewMode, setViewMode] = useState("list"); // "list" or "map"
+
+  const userRole = "LGU";
 
   const INITIAL_INCIDENT_DISPLAY_COUNT = 2;
 
@@ -392,9 +445,35 @@ export default function Dashboard() {
     closeIncidentPopup();
   };
 
+  const handleFacilityUpdate = (facilityId, updates) => {
+    let updatedFacility = null;
+    setCoreFacilities((prev) =>
+      prev.map((facility) => {
+        if (facility.id !== facilityId) {
+          return facility;
+        }
+        updatedFacility = {
+          ...facility,
+          ...updates,
+          lastUpdated: new Date().toISOString(),
+        };
+        return updatedFacility;
+      })
+    );
+
+    if (updatedFacility && updates.status) {
+      addAlert({
+        id: `facility-${facilityId}-${Date.now()}`,
+        msg: `${updatedFacility.name} marked ${updates.status}`,
+        time: "Just now",
+        type: "System",
+      });
+    }
+  };
+
   const handleAssign = (id, responder = null) => {
-    const targetIncident = activeIncidents.find((inc) => inc.id === id);
-    if (!targetIncident) {
+    const foundIncident = activeIncidents.find((inc) => inc.id === id);
+    if (!foundIncident) {
       return;
     }
 
@@ -402,7 +481,7 @@ export default function Dashboard() {
     let resolvedEta = responder?.etaMinutes ?? null;
 
     if (!resolvedResponder) {
-      const suggestion = pickResponderForIncident(targetIncident, responders);
+      const suggestion = pickResponderForIncident(foundIncident, responders);
       if (suggestion) {
         resolvedResponder = suggestion.responder;
         resolvedEta = suggestion.etaMinutes;
@@ -410,10 +489,10 @@ export default function Dashboard() {
     }
 
     if (!resolvedResponder) {
-      const incidentLabel = ${targetIncident.type} in ;
+      const incidentLabel = `${foundIncident.type} in ${foundIncident.location}`;
       addAlert({
-        id: ssign--,
-        msg: ${incidentLabel} queued: no available team. Review in Management.,
+        id: assign--,
+        msg: `${incidentLabel} queued: no available team. Review in Management.`,
         time: "Just now",
         type: "System",
       });
@@ -429,16 +508,22 @@ export default function Dashboard() {
         inc.id === id
           ? {
               ...inc,
-              status: Assigned to ,
+              status: `Assigned to ${resolvedResponder.name}`,
               assignedResponder: {
                 id: resolvedResponder.id,
                 name: resolvedResponder.name,
                 status: responderStatusLabel,
                 etaMinutes:
-                  resolvedEta ?? resolvedResponder.etaMinutes ?? inc.etaMinutes ?? null,
+                  resolvedEta ??
+                  resolvedResponder.etaMinutes ??
+                  inc.etaMinutes ??
+                  null,
               },
               etaMinutes:
-                resolvedEta ?? resolvedResponder.etaMinutes ?? inc.etaMinutes ?? null,
+                resolvedEta ??
+                resolvedResponder.etaMinutes ??
+                inc.etaMinutes ??
+                null,
             }
           : inc
       )
@@ -458,11 +543,11 @@ export default function Dashboard() {
       )
     );
 
-    const incidentLabel = ${targetIncident.type} in ;
+    const incidentLabel = `${foundIncident.type} in ${foundIncident.location}`;
 
     addAlert({
-      id: ssign--,
-      msg: ${resolvedResponder.name} assigned to .,
+      id: assign--,
+      msg: `${resolvedResponder.name} assigned to ${incidentLabel}.`,
       time: "Just now",
       type: "System",
     });
@@ -668,7 +753,10 @@ export default function Dashboard() {
                       severityFilter === "All" || i.severity === severityFilter
                   )}
                 responders={responders}
+                coreFacilities={coreFacilities}
+                viewerRole={userRole}
                 onAssign={handleAssign}
+                onFacilityUpdate={handleFacilityUpdate}
                 onIncidentSelect={showIncidentPopup}
               />
             )}
