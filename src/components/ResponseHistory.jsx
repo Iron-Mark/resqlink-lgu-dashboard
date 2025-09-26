@@ -18,7 +18,7 @@ const historyRecords = [
     outcome: "Resolved",
     date: "2025-09-20T08:45:00Z",
     barangay: "Brgy. Malanday",
-    assignedResponder: "Team Alpha",
+    assignedResponder: "Miguel Santos",
     peopleAssisted: 48,
     media: ["river-rising.jpg", "evac-route.mp4"],
     aiSummary:
@@ -36,7 +36,7 @@ const historyRecords = [
     outcome: "Contained",
     date: "2025-09-18T19:12:00Z",
     barangay: "Brgy. Concepcion",
-    assignedResponder: "Team Bravo",
+    assignedResponder: "Leah Ramirez",
     peopleAssisted: 12,
     media: ["warehouse-fire.jpg"],
     aiSummary:
@@ -54,7 +54,7 @@ const historyRecords = [
     outcome: "Closed",
     date: "2025-09-15T11:05:00Z",
     barangay: "Brgy. San Roque",
-    assignedResponder: "Team Charlie",
+    assignedResponder: "Paolo Fernandez",
     peopleAssisted: 6,
     media: [],
     aiSummary:

@@ -1,4 +1,4 @@
-ï»¿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ClipboardCheck,
   CalendarDays,
@@ -15,19 +15,19 @@ const shiftTemplates = [
     id: "shift-1",
     label: "Day Shift",
     window: "06:00 - 14:00",
-    leads: ["Team Alpha", "Team Delta"],
+    leads: ["Miguel Santos", "Amina Cruz"],
   },
   {
     id: "shift-2",
     label: "Swing Shift",
     window: "14:00 - 22:00",
-    leads: ["Team Bravo"],
+    leads: ["Leah Ramirez"],
   },
   {
     id: "shift-3",
     label: "Night Shift",
     window: "22:00 - 06:00",
-    leads: ["Team Echo"],
+    leads: ["Noel Garcia"],
   },
 ];
 
@@ -38,7 +38,7 @@ const missionQueue = [
     location: "Brgy. Malanday",
     severity: "High",
     eta: "8 min",
-    requested: ["Team Alpha", "Team Charlie"],
+    requested: ["Miguel Santos", "Paolo Fernandez"],
   },
   {
     id: "INC-212",
@@ -46,27 +46,27 @@ const missionQueue = [
     location: "Brgy. Santolan",
     severity: "Medium",
     eta: "12 min",
-    requested: ["Team Bravo"],
+    requested: ["Leah Ramirez"],
   },
 ];
 
 const safetySignals = {
   checkIns: [
-    { id: "R-003", label: "Team Charlie", due: "Overdue 3 min" },
-    { id: "R-002", label: "Team Bravo", due: "Due in 6 min" },
+    { id: "R-003", label: "Paolo Fernandez", due: "Overdue 3 min" },
+    { id: "R-002", label: "Leah Ramirez", due: "Due in 6 min" },
   ],
   mayday: [
     {
       id: "alert-11",
       label: "Auto SOS",
-      details: "Bravo triggered panic from ladder truck",
+      details: "Ramirez triggered panic from ladder truck",
       time: "Today 14:22",
     },
   ],
   trails: [
     {
       id: "trail-1",
-      team: "Team Delta",
+      team: "Amina Cruz",
       lastPoints: ["Command Post", "Brgy. San Roque footbridge"],
     },
   ],
@@ -213,7 +213,7 @@ export default function Management() {
               <p className="text-xs text-ui-subtext">{shift.window}</p>
               <div className="mt-2 space-y-1 text-xs text-ui-subtext">
                 {shift.leads.map((lead) => (
-                  <p key={lead}>â€¢ {lead}</p>
+                  <p key={lead}>• {lead}</p>
                 ))}
               </div>
               <button className="mt-3 w-full rounded-lg bg-brand-primary/10 py-2 text-xs font-semibold text-brand-primary">
@@ -236,7 +236,7 @@ export default function Management() {
             </div>
             <ul className="mt-2 space-y-1 text-xs text-ui-subtext">
               {safetySignals.checkIns.map((item) => (
-                <li key={item.id}>{item.label} â€” {item.due}</li>
+                <li key={item.id}>{item.label} — {item.due}</li>
               ))}
             </ul>
             <button className="mt-3 w-full rounded-lg bg-brand-primary/10 py-2 text-xs font-semibold text-brand-primary">
@@ -249,7 +249,7 @@ export default function Management() {
             </div>
             <ul className="mt-2 space-y-1 text-xs text-status-high">
               {safetySignals.mayday.map((item) => (
-                <li key={item.id}>{item.details} â€” {item.time}</li>
+                <li key={item.id}>{item.details} — {item.time}</li>
               ))}
             </ul>
             <button className="mt-3 w-full rounded-lg bg-status-high/10 py-2 text-xs font-semibold text-status-high">
@@ -264,7 +264,7 @@ export default function Management() {
               {safetySignals.trails.map((trail) => (
                 <li key={trail.id}>
                   <span className="font-semibold text-ui-text">{trail.team}</span>
-                  <span className="block">Path: {trail.lastPoints.join(" â†’ ")}</span>
+                  <span className="block">Path: {trail.lastPoints.join(" ? ")}</span>
                 </li>
               ))}
             </ul>

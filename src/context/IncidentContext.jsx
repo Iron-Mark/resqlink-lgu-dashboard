@@ -109,7 +109,7 @@ const initialIncidentSeeds = [
     id: "INC-002",
     type: "Fire",
     severity: "Medium",
-    status: "Team Mobilized",
+    status: "Responder Mobilized",
     location: "Brgy. Concepcion",
     coordinates: INCIDENT_COORDINATES["Brgy. Concepcion"],
     time: "5m ago",
@@ -123,7 +123,7 @@ const initialIncidentSeeds = [
     recommendedAction: "Hold perimeter and prepare backup water supply.",
     assignedResponder: {
       id: "R-002",
-      name: "Team Bravo",
+      name: "Leah Ramirez",
       status: "En Route",
       etaMinutes: 4,
     },
@@ -248,9 +248,9 @@ const initialIncidentSeeds = [
 const initialResponders = [
   {
     id: "R-001",
-    name: "Team Alpha",
+    name: "Miguel Santos",
     status: "Available",
-    members: 3,
+    members: 1,
     location: "Brgy. Malanday Station",
     lastActive: "2m ago",
     specialization: ["Flood", "Medical"],
@@ -269,9 +269,9 @@ const initialResponders = [
   },
   {
     id: "R-002",
-    name: "Team Bravo",
+    name: "Leah Ramirez",
     status: "En Route",
-    members: 4,
+    members: 1,
     location: "Brgy. Concepcion Depot",
     lastActive: "5m ago",
     specialization: ["Fire", "Technical Rescue"],
@@ -290,9 +290,9 @@ const initialResponders = [
   },
   {
     id: "R-003",
-    name: "Team Charlie",
+    name: "Paolo Fernandez",
     status: "On Scene",
-    members: 2,
+    members: 1,
     location: "Brgy. Sto. Nino Ridge",
     lastActive: "10m ago",
     specialization: ["Medical", "Evacuation"],
@@ -311,9 +311,9 @@ const initialResponders = [
   },
   {
     id: "R-004",
-    name: "Team Delta",
+    name: "Amina Cruz",
     status: "Available",
-    members: 5,
+    members: 1,
     location: "Brgy. Bayan Hub",
     lastActive: "15m ago",
     specialization: ["Search & Rescue", "Medical"],
@@ -332,9 +332,9 @@ const initialResponders = [
   },
   {
     id: "R-005",
-    name: "Team Echo",
+    name: "Noel Garcia",
     status: "Off Duty",
-    members: 3,
+    members: 1,
     location: "Central Base",
     lastActive: "1h ago",
     specialization: ["Fire", "Earthquake Response"],
@@ -410,7 +410,7 @@ const initialHistory = [
     decisionType: "After Action",
     date: "2025-09-20T08:45:00Z",
     barangay: "Brgy. Malanday",
-    assignedResponder: "Team Alpha",
+    assignedResponder: "Miguel Santos",
     peopleAssisted: 48,
     media: ["river-rising.jpg", "evac-route.mp4"],
     aiSummary:
@@ -435,7 +435,7 @@ const initialHistory = [
     decisionType: "After Action",
     date: "2025-09-18T19:12:00Z",
     barangay: "Brgy. Concepcion",
-    assignedResponder: "Team Bravo",
+    assignedResponder: "Leah Ramirez",
     peopleAssisted: 12,
     media: ["warehouse-fire.jpg"],
     aiSummary:
@@ -457,7 +457,7 @@ const initialHistory = [
     decisionType: "After Action",
     date: "2025-09-15T11:05:00Z",
     barangay: "Brgy. San Roque",
-    assignedResponder: "Team Charlie",
+    assignedResponder: "Paolo Fernandez",
     peopleAssisted: 6,
     media: [],
     aiSummary:
@@ -737,7 +737,7 @@ export function IncidentProvider({ children }) {
       [
         "Awaiting Dispatch",
         "Pending",
-        "Team Mobilized",
+        "Responder Mobilized",
         "Crew En Route",
         "Triage Requested",
         "Roads Blocked",
