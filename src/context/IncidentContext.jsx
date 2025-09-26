@@ -1,4 +1,4 @@
-﻿import {
+import {
   createContext,
   useCallback,
   useContext,
@@ -8,6 +8,19 @@
 import { useNotifications } from "./NotificationContext";
 
 const IncidentContext = createContext(null);
+
+const actionTypes = {
+  SET_INCIDENTS: "SET_INCIDENTS",
+  UPDATE_INCIDENT_STATUS: "UPDATE_INCIDENT_STATUS",
+  ADD_INCIDENT: "ADD_INCIDENT",
+  SET_RESPONDERS: "SET_RESPONDERS",
+  UPDATE_RESPONDER_STATUS: "UPDATE_RESPONDER_STATUS",
+  ADD_RESPONDER: "ADD_RESPONDER",
+  UPDATE_RESPONDER: "UPDATE_RESPONDER",
+  DELETE_RESPONDER: "DELETE_RESPONDER",
+  SET_FACILITIES: "SET_FACILITIES",
+  SET_SELECTED_INCIDENT: "SET_SELECTED_INCIDENT",
+};
 
 const INCIDENT_COORDINATES = {
   "Brgy. Malanday": { lat: 14.676, lng: 121.0437 },
@@ -53,34 +66,59 @@ const FINAL_STATES = new Set(["Resolved", "Cancelled", "Closed"]);
 
 const SAMPLE_PII = [
   {
-    name: "Santos Family",
-    notes: "Infant onboard; requires carrier",
-    contact: "+63 917 555 2201",
+    id: "R-001",
+    name: "Miguel Santos",
+    agency: "Marikina City DRRMO",
+    contact: "+639171234567",
+    status: "Available",
+    location: "Command Post",
+    specialization: ["Swiftwater Rescue", "Medical First Responder"],
+    certifications: ["EMT-B", "WR-TECH"],
+    avatar: "https://i.pravatar.cc/150?u=R-001",
   },
   {
-    name: "Maria Luna",
-    notes: "Elderly; wheelchair assistance",
-    contact: "+63 915 412 8890",
+    id: "R-002",
+    name: "Leah Ramirez",
+    agency: "Bureau of Fire Protection",
+    contact: "+639287654321",
+    status: "On Mission",
+    location: "Brgy. Santolan",
+    specialization: ["Fire Suppression", "HazMat Operations"],
+    certifications: ["Fire Officer I", "HAZMAT-OPS"],
+    avatar: "https://i.pravatar.cc/150?u=R-002",
   },
   {
-    name: "Josefina Ramos",
-    notes: "Dialysis patient; ensure cold chain",
-    contact: "+63 917 662 4411",
+    id: "R-003",
+    name: "Paolo Fernandez",
+    agency: "Marikina City DRRMO",
+    contact: "+639951112233",
+    status: "Available",
+    location: "Command Post",
+    specialization: ["High-Angle Rescue", "Vehicle Extrication"],
+    certifications: ["SPRAT-L1", "T-VEX"],
+    avatar: "https://i.pravatar.cc/150?u=R-003",
   },
   {
-    name: "Flores Family",
-    notes: "Two toddlers, needs formula",
-    contact: "+63 917 332 7701",
+    id: "R-004",
+    name: "Amina Cruz",
+    agency: "Philippine Red Cross",
+    contact: "+639164455667",
+    status: "Out of Service",
+    location: "Home",
+    specialization: ["Psychosocial Support", "WASH"],
+    certifications: ["PSS-Practitioner", "WASH-Specialist"],
+    avatar: "https://i.pravatar.cc/150?u=R-004",
   },
   {
-    name: "Emilio Dela Cruz",
-    notes: "Insulin dependent",
-    contact: "+63 917 004 1123",
-  },
-  {
-    name: "Barangay Youth Council",
-    notes: "Volunteer leader coordinating crowd",
-    contact: "+63 905 224 1189",
+    id: "R-005",
+    name: "Noel Garcia",
+    agency: "Bureau of Fire Protection",
+    contact: "+639398877665",
+    status: "Available",
+    location: "Fire Station 3",
+    specialization: ["Fire Suppression", "Incident Command"],
+    certifications: ["Fire Officer III", "ICS-L3"],
+    avatar: "https://i.pravatar.cc/150?u=R-005",
   },
 ];
 
@@ -353,6 +391,96 @@ const initialResponders = [
   },
 ];
 
+function generateResponderId(current = []) {
+  const attempt = Math.floor(1000 + Math.random() * 9000);
+  const candidate = `R-${attempt}`;
+  if (current.some((item) => item.id === candidate)) {
+    return generateResponderId(current);
+  }
+  return candidate;
+}
+
+function clamp01(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+function normalizeSpecializations(input, fallback = []) {
+  if (!input && !fallback.length) {
+    return [];
+  }
+  const source = input ?? fallback;
+  const list = Array.isArray(source)
+    ? source
+    : String(source)
+        .split(",")
+        .map((entry) => entry.trim());
+  return list.map((entry) => entry.replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+
+function normalizeResponder(nextResponder, existingResponder = null) {
+  if (!nextResponder && !existingResponder) {
+    return null;
+  }
+  const base = existingResponder ?? {};
+  const nowIso = new Date().toISOString();
+  const specialization = normalizeSpecializations(
+    nextResponder?.specialization,
+    base.specialization ?? []
+  );
+  const coordinatesSource =
+    nextResponder?.coordinates || base.coordinates || DEFAULT_COORDINATE;
+  const lat = Number(coordinatesSource.lat);
+  const lng = Number(coordinatesSource.lng);
+  const coordinates = {
+    lat: Number.isFinite(lat) ? lat : DEFAULT_COORDINATE.lat,
+    lng: Number.isFinite(lng) ? lng : DEFAULT_COORDINATE.lng,
+  };
+  const membersValue = Number(nextResponder?.members ?? base.members ?? 1);
+  const workloadValue =
+    typeof nextResponder?.workload === "number"
+      ? nextResponder.workload
+      : typeof base.workload === "number"
+      ? base.workload
+      : 0.25;
+
+  return {
+    ...base,
+    ...nextResponder,
+    id: nextResponder?.id ?? base.id,
+    name: (nextResponder?.name ?? base.name ?? "Untitled Responder").trim(),
+    status: nextResponder?.status ?? base.status ?? "Available",
+    members: Number.isFinite(membersValue)
+      ? Math.max(1, Math.round(membersValue))
+      : 1,
+    specialization,
+    agency: nextResponder?.agency ?? base.agency ?? "LGU Command Center",
+    location: nextResponder?.location ?? base.location ?? "Unassigned",
+    contactNumber: nextResponder?.contactNumber ?? base.contactNumber ?? "",
+    homeBase: nextResponder?.homeBase ?? base.homeBase ?? "",
+    shiftWindow: nextResponder?.shiftWindow ?? base.shiftWindow ?? "Unassigned",
+    dutyHistory: Array.isArray(nextResponder?.dutyHistory)
+      ? nextResponder.dutyHistory
+      : base.dutyHistory ?? [],
+    coordinates,
+    workload: clamp01(workloadValue),
+    etaMinutes: nextResponder?.etaMinutes ?? base.etaMinutes ?? null,
+    currentAssignment:
+      nextResponder?.currentAssignment ?? base.currentAssignment ?? null,
+    lastActive: nextResponder?.lastActive ?? base.lastActive ?? "Just now",
+    lastCheckIn: nextResponder?.lastCheckIn ?? base.lastCheckIn ?? "Just now",
+    lastPingAt: nextResponder?.lastPingAt ?? base.lastPingAt ?? nowIso,
+  };
+}
+
+function sortResponders(list) {
+  return [...list].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 const initialFacilities = [
   {
     id: "FAC-001",
@@ -544,6 +672,33 @@ function incidentReducer(state, action) {
                 lastPingAt: new Date().toISOString(),
               }
             : responder
+        ),
+      };
+    case actionTypes.ADD_RESPONDER: {
+      const newResponder = {
+        ...action.payload,
+        id: `R-${String(Date.now()).slice(-4)}`,
+        avatar: `https://i.pravatar.cc/150?u=${Date.now()}`,
+      };
+      return {
+        ...state,
+        responders: [...state.responders, newResponder],
+      };
+    }
+    case actionTypes.UPDATE_RESPONDER:
+      return {
+        ...state,
+        responders: state.responders.map((responder) =>
+          responder.id === action.payload.id
+            ? { ...responder, ...action.payload }
+            : responder
+        ),
+      };
+    case actionTypes.DELETE_RESPONDER:
+      return {
+        ...state,
+        responders: state.responders.filter(
+          (responder) => responder.id !== action.payload
         ),
       };
     case "ADD_INCIDENT":
@@ -810,6 +965,15 @@ export function IncidentProvider({ children }) {
       initiateCall,
       clearIncidentConflict,
       getSuggestedResponders,
+      addResponder: (responder) => {
+        dispatch({ type: actionTypes.ADD_RESPONDER, payload: responder });
+      },
+      updateResponder: (responder) => {
+        dispatch({ type: actionTypes.UPDATE_RESPONDER, payload: responder });
+      },
+      deleteResponder: (id) => {
+        dispatch({ type: actionTypes.DELETE_RESPONDER, payload: id });
+      },
     }),
     [
       state.incidents,
@@ -900,8 +1064,7 @@ function enrichIncident(seed) {
     citizenSnapshot,
     peopleStats,
     mediaGallery,
-    playbookRef:
-      seed.playbookRef || `${seed.type.toUpperCase().replace(/\s+/g, "-")}-SOP`,
+    playbookRef: seed.type.toUpperCase().replace(/\s+/g, "-") + "-SOP",
     decisionLog: seed.decisionLog ?? [],
     flags,
     version: seed.version ?? 1,

@@ -6,8 +6,10 @@ import {
   Route,
   BellRing,
   MapPin,
+  PlusCircle,
 } from "lucide-react";
 import Responders from "./Responders";
+import ResponderForm from "./ResponderForm";
 import { useIncidentContext } from "../context/IncidentContext";
 
 const shiftTemplates = [
@@ -73,10 +75,18 @@ const safetySignals = {
 };
 
 export default function Management() {
-  const { responders, updateResponderStatus } = useIncidentContext();
+  const {
+    responders,
+    updateResponderStatus,
+    addResponder,
+    updateResponder,
+    deleteResponder,
+  } = useIncidentContext();
   const [agencyFilter, setAgencyFilter] = useState("All");
   const [skillFilter, setSkillFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedResponder, setSelectedResponder] = useState(null);
 
   const agencies = useMemo(
     () => ["All", ...new Set(responders.map((responder) => responder.agency))],
@@ -93,7 +103,8 @@ export default function Management() {
 
   const filteredResponders = useMemo(() => {
     return responders.filter((responder) => {
-      const matchesAgency = agencyFilter === "All" || responder.agency === agencyFilter;
+      const matchesAgency =
+        agencyFilter === "All" || responder.agency === agencyFilter;
       const matchesSkill =
         skillFilter === "All" || responder.specialization.includes(skillFilter);
       const matchesSearch =
@@ -102,21 +113,59 @@ export default function Management() {
         responder.location.toLowerCase().includes(search.toLowerCase());
       return matchesAgency && matchesSkill && matchesSearch;
     });
-    }, [responders, agencyFilter, skillFilter, search]);
+  }, [responders, agencyFilter, skillFilter, search]);
 
   const handleStatusChange = (responderId, newStatus) => {
     updateResponderStatus(responderId, newStatus);
   };
 
+  const handleOpenForm = (responder = null) => {
+    setSelectedResponder(responder);
+    setIsFormOpen(true);
+  };
+
+  const handleCloseForm = () => {
+    setSelectedResponder(null);
+    setIsFormOpen(false);
+  };
+
+  const handleSaveResponder = (responder) => {
+    if (responder.id) {
+      updateResponder(responder);
+    } else {
+      addResponder(responder);
+    }
+    handleCloseForm();
+  };
+
+  const handleDeleteResponder = (responderId) => {
+    if (window.confirm("Are you sure you want to delete this responder?")) {
+      deleteResponder(responderId);
+      handleCloseForm();
+    }
+  };
+
   return (
     <div className="space-y-6 pb-16">
       <section className="rounded-2xl bg-ui-surface p-4 shadow space-y-4">
-        <div className="flex items-center gap-2">
-          <ClipboardCheck className="h-4 w-4 text-brand-primary" />
-          <h2 className="text-xl font-semibold text-ui-text">Assignment Command</h2>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4 text-brand-primary" />
+            <h2 className="text-xl font-semibold text-ui-text">
+              Assignment Command
+            </h2>
+          </div>
+          <button
+            onClick={() => handleOpenForm()}
+            className="flex items-center gap-2 rounded-full bg-brand-primary px-3 py-1.5 text-sm font-semibold text-white"
+          >
+            <PlusCircle className="h-4 w-4" />
+            Add
+          </button>
         </div>
         <p className="text-sm text-ui-subtext">
-          Align responders, manage shifts, and monitor safety in one place. Filters apply live to the directory below.
+          Align responders, manage shifts, and monitor safety in one place.
+          Filters apply live to the directory below.
         </p>
 
         <div className="flex flex-col gap-3">
@@ -160,12 +209,27 @@ export default function Management() {
         </div>
       </section>
 
-      <Responders responders={filteredResponders} onStatusChange={handleStatusChange} />
+      <Responders
+        responders={filteredResponders}
+        onStatusChange={handleStatusChange}
+        onEdit={handleOpenForm}
+      />
+
+      {isFormOpen && (
+        <ResponderForm
+          responder={selectedResponder}
+          onSave={handleSaveResponder}
+          onCancel={handleCloseForm}
+          onDelete={handleDeleteResponder}
+        />
+      )}
 
       <section className="rounded-2xl bg-ui-surface p-4 shadow space-y-4">
         <div className="flex items-center gap-2">
           <ClipboardCheck className="h-4 w-4 text-brand-primary" />
-          <h3 className="text-lg font-semibold text-ui-text">Active Missions</h3>
+          <h3 className="text-lg font-semibold text-ui-text">
+            Active Missions
+          </h3>
         </div>
         <div className="space-y-3">
           {missionQueue.map((mission) => (
@@ -175,7 +239,9 @@ export default function Management() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-ui-text">{mission.title}</p>
+                  <p className="text-sm font-semibold text-ui-text">
+                    {mission.title}
+                  </p>
                   <div className="mt-1 flex items-center gap-2 text-xs text-ui-subtext">
                     <MapPin className="h-3.5 w-3.5" /> {mission.location}
                   </div>
@@ -204,16 +270,23 @@ export default function Management() {
       <section className="rounded-2xl bg-ui-surface p-4 shadow space-y-4">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4 text-brand-primary" />
-          <h3 className="text-lg font-semibold text-ui-text">Shift & Duty Planner</h3>
+          <h3 className="text-lg font-semibold text-ui-text">
+            Shift & Duty Planner
+          </h3>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {shiftTemplates.map((shift) => (
-            <div key={shift.id} className="rounded-xl border border-ui-border bg-ui-background p-3">
-              <p className="text-sm font-semibold text-ui-text">{shift.label}</p>
+            <div
+              key={shift.id}
+              className="rounded-xl border border-ui-border bg-ui-background p-3"
+            >
+              <p className="text-sm font-semibold text-ui-text">
+                {shift.label}
+              </p>
               <p className="text-xs text-ui-subtext">{shift.window}</p>
               <div className="mt-2 space-y-1 text-xs text-ui-subtext">
                 {shift.leads.map((lead) => (
-                  <p key={lead}>• {lead}</p>
+                  <p key={lead}>ï¿½ {lead}</p>
                 ))}
               </div>
               <button className="mt-3 w-full rounded-lg bg-brand-primary/10 py-2 text-xs font-semibold text-brand-primary">
@@ -236,7 +309,9 @@ export default function Management() {
             </div>
             <ul className="mt-2 space-y-1 text-xs text-ui-subtext">
               {safetySignals.checkIns.map((item) => (
-                <li key={item.id}>{item.label} — {item.due}</li>
+                <li key={item.id}>
+                  {item.label} ï¿½ {item.due}
+                </li>
               ))}
             </ul>
             <button className="mt-3 w-full rounded-lg bg-brand-primary/10 py-2 text-xs font-semibold text-brand-primary">
@@ -249,7 +324,9 @@ export default function Management() {
             </div>
             <ul className="mt-2 space-y-1 text-xs text-status-high">
               {safetySignals.mayday.map((item) => (
-                <li key={item.id}>{item.details} — {item.time}</li>
+                <li key={item.id}>
+                  {item.details} ï¿½ {item.time}
+                </li>
               ))}
             </ul>
             <button className="mt-3 w-full rounded-lg bg-status-high/10 py-2 text-xs font-semibold text-status-high">
@@ -263,8 +340,12 @@ export default function Management() {
             <ul className="mt-2 space-y-1 text-xs text-ui-subtext">
               {safetySignals.trails.map((trail) => (
                 <li key={trail.id}>
-                  <span className="font-semibold text-ui-text">{trail.team}</span>
-                  <span className="block">Path: {trail.lastPoints.join(" ? ")}</span>
+                  <span className="font-semibold text-ui-text">
+                    {trail.team}
+                  </span>
+                  <span className="block">
+                    Path: {trail.lastPoints.join(" ? ")}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -277,4 +358,3 @@ export default function Management() {
     </div>
   );
 }
-
