@@ -87,7 +87,7 @@ const TabButton = ({ tab, activeTab, onClick }) => {
   return (
     <button
       onClick={() => onClick(tab.id)}
-      className={`flex flex-col items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors w-full ${
+      className={`flex flex-row items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold transition-colors w-full ${
         isActive
           ? "bg-brand-primary/10 text-brand-primary"
           : "text-ui-subtext hover:bg-ui-fill"
@@ -107,40 +107,9 @@ export default function Management() {
     updateResponder,
     deleteResponder,
   } = useIncidentContext();
-  const [agencyFilter, setAgencyFilter] = useState("All");
-  const [skillFilter, setSkillFilter] = useState("All");
-  const [search, setSearch] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedResponder, setSelectedResponder] = useState(null);
   const [activeTab, setActiveTab] = useState(TABS.DIRECTORY.id);
-
-  const agencies = useMemo(
-    () => ["All", ...new Set(responders.map((responder) => responder.agency))],
-    [responders]
-  );
-
-  const skills = useMemo(() => {
-    const allSkills = new Set();
-    responders.forEach((responder) => {
-      (responder.specialization || []).forEach((skill) => allSkills.add(skill));
-    });
-    return ["All", ...allSkills];
-  }, [responders]);
-
-  const filteredResponders = useMemo(() => {
-    return responders.filter((responder) => {
-      const matchesAgency =
-        agencyFilter === "All" || responder.agency === agencyFilter;
-      const matchesSkill =
-        skillFilter === "All" ||
-        (responder.specialization || []).includes(skillFilter);
-      const matchesSearch =
-        !search.trim() ||
-        responder.name.toLowerCase().includes(search.toLowerCase()) ||
-        (responder.location || "").toLowerCase().includes(search.toLowerCase());
-      return matchesAgency && matchesSkill && matchesSearch;
-    });
-  }, [responders, agencyFilter, skillFilter, search]);
 
   const handleStatusChange = (responderId, newStatus) => {
     updateResponderStatus(responderId, newStatus);
@@ -174,7 +143,7 @@ export default function Management() {
 
   return (
     <div className="space-y-4 pb-16">
-      <div className="grid grid-cols-4 gap-2 rounded-2xl bg-ui-surface p-2 shadow">
+      <div className="grid grid-cols-4 gap-2 rounded-2xl bg-ui-surface p-2 shadow mt-4">
         {Object.values(TABS).map((tab) => (
           <TabButton
             key={tab.id}
@@ -188,57 +157,11 @@ export default function Management() {
       <div className="space-y-4">
         {activeTab === TABS.DIRECTORY.id && (
           <section className="space-y-4">
-            <div className="rounded-2xl bg-ui-surface p-4 shadow space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-ui-text">
-                  Responder Directory
-                </h2>
-                <button
-                  onClick={() => handleOpenForm()}
-                  className="flex items-center gap-2 rounded-full bg-brand-primary px-3 py-1.5 text-sm font-semibold text-white"
-                >
-                  <PlusCircle className="h-4 w-4" />
-                  Add
-                </button>
-              </div>
-              <div className="flex flex-col gap-3">
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search responders or barangays"
-                  className="w-full rounded-xl border border-ui-border bg-ui-background px-3 py-2 text-sm"
-                />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <select
-                    value={agencyFilter}
-                    onChange={(e) => setAgencyFilter(e.target.value)}
-                    className="w-full rounded-xl border border-ui-border bg-ui-background px-3 py-2 text-sm"
-                  >
-                    {agencies.map((agency) => (
-                      <option key={agency} value={agency}>
-                        {agency === "All" ? "All Agencies" : agency}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={skillFilter}
-                    onChange={(e) => setSkillFilter(e.target.value)}
-                    className="w-full rounded-xl border border-ui-border bg-ui-background px-3 py-2 text-sm"
-                  >
-                    {skills.map((skill) => (
-                      <option key={skill} value={skill}>
-                        {skill === "All" ? "All Skills" : skill}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
             <Responders
-              responders={filteredResponders}
+              responders={responders}
               onStatusChange={handleStatusChange}
               onEdit={handleOpenForm}
+              onAdd={() => handleOpenForm()}
             />
           </section>
         )}

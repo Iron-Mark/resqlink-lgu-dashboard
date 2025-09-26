@@ -188,7 +188,40 @@ const statusChipClass = (status) => {
 };
 
 const ResponderCard = ({ responder, onSelect, onEdit, editMode }) => {
-  const statusColor = getStatusColor(responder.status);
+  const statusColors = {
+    Available: {
+      bg: "bg-emerald-100",
+      text: "text-emerald-800",
+      dot: "bg-emerald-500",
+    },
+    "On Mission": {
+      bg: "bg-amber-100",
+      text: "text-amber-800",
+      dot: "bg-amber-500",
+    },
+    "On Scene": {
+      bg: "bg-amber-100",
+      text: "text-amber-800",
+      dot: "bg-amber-500",
+    },
+    "En Route": {
+      bg: "bg-amber-100",
+      text: "text-amber-800",
+      dot: "bg-amber-500",
+    },
+    "Out of Service": {
+      bg: "bg-slate-100",
+      text: "text-slate-600",
+      dot: "bg-slate-400",
+    },
+    "Off Duty": {
+      bg: "bg-slate-100",
+      text: "text-slate-600",
+      dot: "bg-slate-400",
+    },
+  };
+
+  const colors = statusColors[responder.status] || statusColors["Off Duty"];
 
   const handleCardClick = () => {
     if (editMode) {
@@ -200,40 +233,68 @@ const ResponderCard = ({ responder, onSelect, onEdit, editMode }) => {
 
   return (
     <div
-      className={`rounded-2xl bg-ui-surface p-3 shadow transition-all ${
-        editMode ? "ring-2 ring-accent-blue cursor-pointer" : "hover:shadow-md"
+      className={`group relative overflow-hidden rounded-2xl bg-white shadow-sm border transition-all duration-200 ${
+        editMode
+          ? "ring-2 ring-blue-500 shadow-lg cursor-pointer transform hover:scale-[1.02]"
+          : "border-slate-200 hover:shadow-md hover:border-slate-300"
       }`}
       onClick={handleCardClick}
     >
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <p className="truncate font-semibold text-ui-text">
-              {responder.name}
-            </p>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span
-                className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor
-                  .replace("bg-", "text-")
-                  .replace("-500", "-900")} ${statusColor.replace(
-                  "500",
-                  "100"
-                )}`}
+      {/* Status indicator bar */}
+      <div className={`absolute top-0 left-0 right-0 h-1 ${colors.dot}`} />
+
+      <div className="p-4">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="font-semibold text-gray-900 truncate">
+                {responder.name}
+              </h3>
+              <div
+                className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}
               >
+                <div className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
                 {responder.status}
-              </span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-ui-subtext mt-1">
-            <Shield className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate">{responder.agency}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-ui-subtext">
-            <MapPin size={14} />{" "}
-            <span className="truncate">{responder.location}</span>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Shield className="w-4 h-4 text-blue-500" />
+                <span className="truncate">{responder.agency}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <MapPin className="w-4 h-4 text-green-500" />
+                <span className="truncate">{responder.location}</span>
+              </div>
+            </div>
+
+            {responder.specialization && (
+              <div className="flex flex-wrap gap-1 mt-3">
+                {responder.specialization.slice(0, 2).map((skill) => (
+                  <span
+                    key={skill}
+                    className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-full"
+                  >
+                    {skill}
+                  </span>
+                ))}
+                {responder.specialization.length > 2 && (
+                  <span className="px-2 py-1 text-xs bg-gray-50 text-gray-500 rounded-full">
+                    +{responder.specialization.length - 2} more
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {editMode && (
+        <div className="absolute top-3 right-3 bg-blue-500 text-white rounded-full p-1.5">
+          <Edit className="w-3 h-3" />
+        </div>
+      )}
     </div>
   );
 };
@@ -463,68 +524,105 @@ export default function Responders({
   const statuses = ["All", "Available", "On Mission", "Out of Service"];
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="p-4 bg-ui-background border-b border-ui-surface-border">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-ui-text">
-            Responder Directory
-          </h2>
-          <button
-            onClick={() => setEditMode(!editMode)}
-            className={`p-2 rounded-full transition-colors ${
-              editMode
-                ? "bg-accent-blue text-white"
-                : "bg-ui-surface text-ui-text"
-            }`}
-            aria-label="Toggle Edit Mode"
-          >
-            <Pencil size={18} />
-          </button>
-        </div>
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 to-white">
+      {/* Combined Header with Search and Filters */}
+      <div className="bg-white border-b border-slate-200 shadow-sm">
+        <div className="p-6">
+          {/* Header Row */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Responder Directory
+              </h1>
+              <p className="text-sm text-gray-600 mt-1">
+                {filteredResponders.length} of {responders.length} responders
+              </p>
+            </div>
+            <button
+              onClick={() => setEditMode(!editMode)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium transition-all duration-200 ${
+                editMode
+                  ? "bg-blue-500 text-white shadow-lg ring-2 ring-blue-200"
+                  : "bg-slate-100 text-gray-700 hover:bg-slate-200"
+              }`}
+            >
+              <Pencil size={16} />
+              {editMode ? "Exit Edit" : "Edit Mode"}
+            </button>
+          </div>
 
-        <div className="mt-3 space-y-3">
-          <div className="relative">
+          {/* Search Bar */}
+          <div className="relative mb-4">
+            <Search
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+              size={20}
+            />
             <input
               type="text"
-              placeholder="Search responders..."
-              className="w-full rounded-full bg-ui-surface px-3 py-2 pl-10 text-sm text-ui-text shadow focus:outline-none focus:ring-2 focus:ring-accent-blue"
+              placeholder="Search by name, agency, or location..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-ui-subtext"
-              size={20}
-            />
           </div>
 
-          <div className="flex space-x-1 rounded-full bg-ui-surface p-1">
-            {statuses.map((s) => (
+          {/* Status Filter Tabs */}
+          <div className="flex bg-slate-100 rounded-2xl p-1">
+            {statuses.map((status) => (
               <button
-                key={s}
-                onClick={() => handleStatusFilterChange(s)}
-                className={`w-full rounded-full py-1.5 text-sm font-medium transition-colors ${
-                  filters.status === s
-                    ? "bg-white text-accent-blue shadow"
-                    : "text-ui-subtext hover:bg-ui-surface-hover"
+                key={status}
+                onClick={() => handleStatusFilterChange(status)}
+                className={`flex-1 rounded-xl py-2.5 px-4 text-sm font-medium transition-all duration-200 ${
+                  filters.status === status
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                {s}
+                {status}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {filteredResponders.map((responder) => (
-          <ResponderCard
-            key={responder.id}
-            responder={responder}
-            onSelect={handleSelectResponder}
-            onEdit={onEdit}
-            editMode={editMode}
-          />
-        ))}
+      {/* Responder List */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-6 space-y-4">
+          {filteredResponders.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Search className="w-6 h-6 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                No responders found
+              </h3>
+              <p className="text-gray-600">
+                Try adjusting your search or filter criteria
+              </p>
+            </div>
+          ) : (
+            filteredResponders.map((responder) => (
+              <ResponderCard
+                key={responder.id}
+                responder={responder}
+                onSelect={handleSelectResponder}
+                onEdit={onEdit}
+                editMode={editMode}
+              />
+            ))
+          )}
+        </div>
+
+        {/* Add Button - Floating */}
+        <div className="sticky bottom-6 flex justify-center px-6 mt-4">
+          <button
+            onClick={onAdd}
+            className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-4 px-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-3 transform hover:scale-105"
+          >
+            <Plus size={20} />
+            Add New Responder
+          </button>
+        </div>
       </div>
 
       <ResponderDetailModal
