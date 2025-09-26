@@ -74,7 +74,6 @@ const SAMPLE_PII = [
     location: "Command Post",
     specialization: ["Swiftwater Rescue", "Medical First Responder"],
     certifications: ["EMT-B", "WR-TECH"],
-    avatar: "https://i.pravatar.cc/150?u=R-001",
   },
   {
     id: "R-002",
@@ -85,7 +84,6 @@ const SAMPLE_PII = [
     location: "Brgy. Santolan",
     specialization: ["Fire Suppression", "HazMat Operations"],
     certifications: ["Fire Officer I", "HAZMAT-OPS"],
-    avatar: "https://i.pravatar.cc/150?u=R-002",
   },
   {
     id: "R-003",
@@ -96,7 +94,6 @@ const SAMPLE_PII = [
     location: "Command Post",
     specialization: ["High-Angle Rescue", "Vehicle Extrication"],
     certifications: ["SPRAT-L1", "T-VEX"],
-    avatar: "https://i.pravatar.cc/150?u=R-003",
   },
   {
     id: "R-004",
@@ -107,7 +104,6 @@ const SAMPLE_PII = [
     location: "Home",
     specialization: ["Psychosocial Support", "WASH"],
     certifications: ["PSS-Practitioner", "WASH-Specialist"],
-    avatar: "https://i.pravatar.cc/150?u=R-004",
   },
   {
     id: "R-005",
@@ -118,7 +114,6 @@ const SAMPLE_PII = [
     location: "Fire Station 3",
     specialization: ["Fire Suppression", "Incident Command"],
     certifications: ["Fire Officer III", "ICS-L3"],
-    avatar: "https://i.pravatar.cc/150?u=R-005",
   },
 ];
 
@@ -678,7 +673,6 @@ function incidentReducer(state, action) {
       const newResponder = {
         ...action.payload,
         id: `R-${String(Date.now()).slice(-4)}`,
-        avatar: `https://i.pravatar.cc/150?u=${Date.now()}`,
       };
       return {
         ...state,

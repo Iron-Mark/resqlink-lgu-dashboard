@@ -1,7 +1,31 @@
 ﻿import { useState, useEffect, useMemo } from "react";
 import { XCircleIcon } from "@heroicons/react/24/outline";
 import { UserIcon, UserGroupIcon } from "@heroicons/react/24/solid";
-import { ChevronDown, MapPin, HeartPulse, Star, X, Edit } from "lucide-react";
+import {
+  ChevronDown,
+  MapPin,
+  HeartPulse,
+  Star,
+  X,
+  Edit,
+  Shield,
+  Pencil,
+  Plus,
+  Search,
+} from "lucide-react";
+
+const getStatusColor = (status) => {
+  switch (status) {
+    case "Available":
+      return "bg-green-500";
+    case "On Mission":
+      return "bg-yellow-500";
+    case "Out of Service":
+      return "bg-gray-500";
+    default:
+      return "bg-gray-300";
+  }
+};
 
 export const defaultResponders = [
   {
@@ -16,6 +40,7 @@ export const defaultResponders = [
     certifications: ["Swift Water", "First Responder"],
     dutyHistory: ["INC-045 Flood Evacuation", "INC-038 Search Ops"],
     lastCheckIn: "Just now",
+    avatar: "https://i.pravatar.cc/150?img=3",
   },
   {
     id: "R-002",
@@ -29,6 +54,7 @@ export const defaultResponders = [
     certifications: ["HazMat", "Breaching"],
     dutyHistory: ["INC-042 Market Fire", "INC-031 Chemical Leak"],
     lastCheckIn: "3m ago",
+    avatar: "https://i.pravatar.cc/150?img=4",
   },
   {
     id: "R-003",
@@ -42,6 +68,7 @@ export const defaultResponders = [
     certifications: ["Paramedic", "Triage Officer"],
     dutyHistory: ["INC-050 Landslide", "INC-035 Heat Stress"],
     lastCheckIn: "7m ago",
+    avatar: "https://i.pravatar.cc/150?img=5",
   },
   {
     id: "R-004",
@@ -55,6 +82,7 @@ export const defaultResponders = [
     certifications: ["Rope Rescue", "First Aid"],
     dutyHistory: ["INC-041 Missing Person"],
     lastCheckIn: "10m ago",
+    avatar: "https://i.pravatar.cc/150?img=6",
   },
   {
     id: "R-005",
@@ -68,6 +96,7 @@ export const defaultResponders = [
     certifications: ["Fire Suppression", "USAR"],
     dutyHistory: ["INC-037 Warehouse Fire"],
     lastCheckIn: "45m ago",
+    avatar: "https://i.pravatar.cc/150?img=7",
   },
 ];
 
@@ -158,71 +187,52 @@ const statusChipClass = (status) => {
   }
 };
 
-const ResponderCard = ({ responder, onStatusChange, onSelect, onEdit }) => {
-  const config =
-    statusConfig[responder.status] || statusConfig["Out of Service"];
+const ResponderCard = ({ responder, onSelect, onEdit, editMode }) => {
+  const statusColor = getStatusColor(responder.status);
+
+  const handleCardClick = () => {
+    if (editMode) {
+      onEdit(responder);
+    } else {
+      onSelect(responder);
+    }
+  };
 
   return (
-    <div className="rounded-2xl bg-ui-surface p-3 shadow transition-all hover:shadow-md">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-primary/10">
-          <UserGroupIcon className="h-6 w-6 text-brand-primary" />
-        </div>
-        <div className="flex-1">
+    <div
+      className={`rounded-2xl bg-ui-surface p-3 shadow transition-all ${
+        editMode ? "ring-2 ring-accent-blue cursor-pointer" : "hover:shadow-md"
+      }`}
+      onClick={handleCardClick}
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-ui-text">
-                {responder.name}
-              </p>
-              <p className="text-xs uppercase tracking-wide text-ui-subtext">
-                {responder.agency}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
+            <p className="truncate font-semibold text-ui-text">
+              {responder.name}
+            </p>
+            <div className="flex items-center gap-2 flex-shrink-0">
               <span
-                className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusChipClass(
-                  responder.status
+                className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor
+                  .replace("bg-", "text-")
+                  .replace("-500", "-900")} ${statusColor.replace(
+                  "500",
+                  "100"
                 )}`}
               >
-                {STATUS_CATEGORY[responder.status] ?? responder.status}
-              </span>
-              <span className="text-xs text-ui-subtext">
-                {responder.location}
+                {responder.status}
               </span>
             </div>
           </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-ui-subtext">
-            <span className="flex items-center gap-1">
-              <UserIcon className="h-3 w-3" /> {responder.members} members
-            </span>
-            <span>• Last active {responder.lastActive}</span>
+          <div className="flex items-center gap-1.5 text-xs text-ui-subtext mt-1">
+            <Shield className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">{responder.agency}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-ui-subtext">
+            <MapPin size={14} />{" "}
+            <span className="truncate">{responder.location}</span>
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => onSelect(responder)}
-            className="rounded-full p-2 text-ui-subtext transition-colors hover:bg-brand-primary/10 hover:text-brand-primary"
-          >
-            <ChevronDown className="h-5 w-5" />
-          </button>
-          <button
-            onClick={() => onEdit(responder)}
-            className="rounded-full p-2 text-ui-subtext transition-colors hover:bg-brand-primary/10 hover:text-brand-primary"
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-2 flex flex-wrap gap-1">
-        {responder.specialization.map((skill) => (
-          <span
-            key={skill}
-            className="rounded-full bg-brand-primary/5 px-2 py-0.5 text-xs text-brand-primary"
-          >
-            {skill}
-          </span>
-        ))}
       </div>
     </div>
   );
@@ -277,7 +287,7 @@ const ResponderDetailModal = ({
               Specialization
             </p>
             <div className="mt-2 flex flex-wrap gap-1">
-              {responder.specialization.map((skill) => (
+              {(responder.specialization || []).map((skill) => (
                 <span
                   key={skill}
                   className="rounded-full bg-brand-primary/10 px-2 py-0.5 text-xs text-brand-primary"
@@ -293,7 +303,7 @@ const ResponderDetailModal = ({
               Certifications
             </p>
             <div className="mt-2 flex flex-wrap gap-1">
-              {responder.certifications.map((cert) => (
+              {(responder.certifications || []).map((cert) => (
                 <span
                   key={cert}
                   className="rounded-md bg-ui-background px-2 py-0.5 text-xs text-ui-text"
@@ -309,7 +319,7 @@ const ResponderDetailModal = ({
               Recent assignments
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ui-text/90">
-              {responder.dutyHistory.map((item) => (
+              {(responder.dutyHistory || []).map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>
@@ -360,12 +370,16 @@ export default function Responders({
   responders: externalResponders,
   onStatusChange,
   onEdit,
+  onAdd,
 }) {
   const [localResponders, setLocalResponders] = useState(
     externalResponders ?? defaultResponders
   );
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedResponder, setSelectedResponder] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filters, setFilters] = useState({ status: "All", agency: "All" });
 
   useEffect(() => {
     if (externalResponders) {
@@ -397,6 +411,11 @@ export default function Responders({
     [responders]
   );
 
+  const agencies = useMemo(
+    () => ["All", ...new Set(responders.map((r) => r.agency))],
+    [responders]
+  );
+
   const statusOptions = useMemo(() => {
     const unique = Array.from(
       new Set(responders.map((responder) => responder.status))
@@ -404,9 +423,16 @@ export default function Responders({
     return ["All", ...unique];
   }, [responders]);
 
-  const filteredResponders = responders.filter((responder) =>
-    statusFilter === "All" ? true : responder.status === statusFilter
-  );
+  const filteredResponders = responders.filter((responder) => {
+    const searchMatch =
+      responder.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      responder.agency.toLowerCase().includes(searchTerm.toLowerCase());
+    const statusMatch =
+      filters.status === "All" || responder.status === filters.status;
+    const agencyMatch =
+      filters.agency === "All" || responder.agency === filters.agency;
+    return searchMatch && statusMatch && agencyMatch;
+  });
 
   const handleStatusChange = (responderId, newStatus) => {
     if (onStatusChange) {
@@ -430,66 +456,75 @@ export default function Responders({
     setSelectedResponder(responder);
   };
 
+  const handleStatusFilterChange = (status) => {
+    setFilters((prev) => ({ ...prev, status }));
+  };
+
+  const statuses = ["All", "Available", "On Mission", "Out of Service"];
+
   return (
-    <div className="bg-ui-surface p-4 rounded-2xl shadow space-y-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-ui-text">
-          Responder Directory
-        </h2>
-        <span className="text-xs uppercase tracking-wider text-ui-subtext">
-          Live
-        </span>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        {summaryCards.map((card) => (
-          <div
-            key={card.key}
-            className="flex flex-col items-center rounded-xl bg-ui-background p-3"
-          >
-            <span className={`mb-1 h-3 w-3 rounded-full ${card.color}`}></span>
-            <span className="text-xs font-medium text-ui-subtext">
-              {card.label}
-            </span>
-            <span className={`text-lg font-semibold ${card.text}`}>
-              {card.count}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 border-b pb-2">
-        {statusOptions.map((status) => (
+    <div className="h-full flex flex-col">
+      <div className="p-4 bg-ui-background border-b border-ui-surface-border">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-ui-text">
+            Responder Directory
+          </h2>
           <button
-            key={status}
-            onClick={() => setStatusFilter(status)}
-            className={`rounded-full px-3 py-1 text-sm font-medium transition ${
-              statusFilter === status
-                ? "bg-brand-primary/10 text-brand-primary"
-                : "text-ui-subtext"
+            onClick={() => setEditMode(!editMode)}
+            className={`p-2 rounded-full transition-colors ${
+              editMode
+                ? "bg-accent-blue text-white"
+                : "bg-ui-surface text-ui-text"
             }`}
+            aria-label="Toggle Edit Mode"
           >
-            {status}
+            <Pencil size={18} />
           </button>
-        ))}
+        </div>
+
+        <div className="mt-3 space-y-3">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search responders..."
+              className="w-full rounded-full bg-ui-surface px-3 py-2 pl-10 text-sm text-ui-text shadow focus:outline-none focus:ring-2 focus:ring-accent-blue"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-ui-subtext"
+              size={20}
+            />
+          </div>
+
+          <div className="flex space-x-1 rounded-full bg-ui-surface p-1">
+            {statuses.map((s) => (
+              <button
+                key={s}
+                onClick={() => handleStatusFilterChange(s)}
+                className={`w-full rounded-full py-1.5 text-sm font-medium transition-colors ${
+                  filters.status === s
+                    ? "bg-white text-accent-blue shadow"
+                    : "text-ui-subtext hover:bg-ui-surface-hover"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="space-y-3">
-        {filteredResponders.length ? (
-          filteredResponders.map((responder) => (
-            <ResponderCard
-              key={responder.id}
-              responder={responder}
-              onStatusChange={onStatusChange}
-              onSelect={handleSelectResponder}
-              onEdit={onEdit}
-            />
-          ))
-        ) : (
-          <p className="py-4 text-center text-sm text-ui-subtext">
-            No responders match the selected filter.
-          </p>
-        )}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {filteredResponders.map((responder) => (
+          <ResponderCard
+            key={responder.id}
+            responder={responder}
+            onSelect={handleSelectResponder}
+            onEdit={onEdit}
+            editMode={editMode}
+          />
+        ))}
       </div>
 
       <ResponderDetailModal
