@@ -6,6 +6,7 @@ export default function PopupIncident({
   onClose,
   onSnooze,
   onAssign,
+  onOpen,
 }) {
   const [timer, setTimer] = useState(0);
 
@@ -72,22 +73,33 @@ export default function PopupIncident({
             <MapPinIcon className="w-5 h-5" />
             <span className="font-medium text-sm">{incident.location}</span>
           </div>
-          <div className="mt-6 grid grid-cols-2 gap-3">
+          <div className="mt-6 space-y-3">
             <button
-              className="px-4 py-3 bg-ui-background text-ui-text rounded-lg font-semibold hover:bg-ui-border transition-colors"
-              onClick={onSnooze}
+              className="w-full px-4 py-3 bg-brand-primary text-white rounded-lg font-semibold hover:bg-brand-secondary transition-colors"
+              onClick={() => onOpen?.()}
             >
-              Snooze
+              Open Incident
             </button>
-            <button
-              className="px-4 py-3 bg-brand-primary text-white rounded-lg font-semibold hover:bg-brand-secondary transition-colors"
-              onClick={onAssign}
-            >
-              Open & Assign
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                className="px-4 py-3 bg-ui-background text-ui-text rounded-lg font-semibold hover:bg-ui-border transition-colors"
+                onClick={onSnooze}
+              >
+                Snooze
+              </button>
+              <button
+                className="px-4 py-3 bg-brand-secondary text-white rounded-lg font-semibold hover:bg-brand-primary transition-colors"
+                onClick={onAssign}
+              >
+                Assign Responder
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+
+

@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNotifications } from "../context/NotificationContext";
+import { useIncidentContext } from "../context/IncidentContext";
 
 import KPI from "./KPI";
 import IncidentCard from "./IncidentCard";
@@ -146,277 +147,79 @@ const pickResponderForIncident = (incident, responderList) => {
     distanceKm: top.distanceKm,
   };
 };
-
 export default function Dashboard() {
   const { popupIncident, showIncidentPopup, closeIncidentPopup, addAlert } =
     useNotifications();
 
-  const kpis = [
-    { label: "Active Reports", value: 8, trend: "+2" },
-    { label: "Pending", value: 3, trend: "-1" },
-    { label: "Resolved Today", value: 12, trend: "+5" },
-    { label: "Responders", value: 5, trend: "+1" },
-  ];
+  const {
+    incidents,
+    responders: responderDirectory,
+    facilities: coreFacilities,
+    registerIncident,
+    snoozeIncident,
+    openAssignSheet,
+    updateResponderStatus,
+    upsertFacility,
+    removeFacility,
+    getSuggestedResponders,
+    kpiSummary,
+    openIncidentDetail,
+  } = useIncidentContext();
 
-  const initialIncidents = [
-    {
-      id: "INC-001",
-      type: "Flood",
-      severity: "High",
-      status: "Awaiting Dispatch",
-      location: "Brgy. Malanday",
-      coordinates: INCIDENT_COORDINATES["Brgy. Malanday"],
-      time: "2m ago",
-      citizenReports: 23,
-      aiHazardScore: 0.87,
-      aiSummary:
-        "River gauge hit critical level; inundation expected within 25 minutes.",
-      riskBand: "Red",
-      impactRadiusKm: 1.6,
-      reportSources: ["Hotline", "Mobile App"],
-      recommendedAction:
-        "Pre-evacuate riverside households and stage rescue boats.",
-      mediaUrl: "https://via.placeholder.com/150/EF4444/FFFFFF?text=Flood",
-    },
-    {
-      id: "INC-002",
-      type: "Fire",
-      severity: "Medium",
-      status: "Team Mobilized",
-      location: "Brgy. Concepcion",
-      coordinates: INCIDENT_COORDINATES["Brgy. Concepcion"],
-      time: "5m ago",
-      citizenReports: 9,
-      aiHazardScore: 0.65,
-      aiSummary:
-        "Thermal plume trending downward; maintain hydrant pressure and cordon.",
-      riskBand: "Amber",
-      impactRadiusKm: 0.9,
-      reportSources: ["Command Center", "CCTV"],
-      recommendedAction: "Hold perimeter and prepare backup water supply.",
-      assignedResponder: {
-        id: "R-002",
-        name: "Team Bravo",
-        status: "En Route",
-        etaMinutes: 4,
-      },
-      mediaUrl: "https://via.placeholder.com/150/F59E0B/FFFFFF?text=Fire",
-    },
-    {
-      id: "INC-003",
-      type: "Vehicle Accident",
-      severity: "Low",
-      status: "Clearing Lane",
-      location: "Brgy. Sto. Nino",
-      coordinates: INCIDENT_COORDINATES["Brgy. Sto. Nino"],
-      time: "10m ago",
-      citizenReports: 4,
-      aiHazardScore: 0.33,
-      aiSummary: "Minor slowdown detected; tow truck arrival in 12 minutes.",
-      riskBand: "Blue",
-      impactRadiusKm: 0.4,
-      reportSources: ["Citizen App"],
-      recommendedAction: "Coordinate towing and clear debris.",
-      mediaUrl: "https://via.placeholder.com/150/3B82F6/000000?text=Accident",
-    },
-    {
-      id: "INC-004",
-      type: "Landslide",
-      severity: "High",
-      status: "Roads Blocked",
-      location: "Brgy. Ibaba",
-      coordinates: INCIDENT_COORDINATES["Brgy. Ibaba"],
-      time: "15m ago",
-      citizenReports: 17,
-      aiHazardScore: 0.79,
-      aiSummary:
-        "Slope sensors show continued drift; secondary slide possible.",
-      riskBand: "Red",
-      impactRadiusKm: 1.1,
-      reportSources: ["Hotline", "Barangay Net"],
-      recommendedAction: "Close access road and deploy geotech team.",
-      mediaUrl: "https://via.placeholder.com/150/8B5CF6/FFFFFF?text=Landslide",
-    },
-    {
-      id: "INC-005",
-      type: "Earthquake",
-      severity: "High",
-      status: "Assessment Ongoing",
-      location: "Brgy. San Roque",
-      coordinates: INCIDENT_COORDINATES["Brgy. San Roque"],
-      time: "20m ago",
-      citizenReports: 11,
-      aiHazardScore: 0.83,
-      aiSummary:
-        "Aftershock probability at 42%; inspect low-rise dwellings first.",
-      riskBand: "Red",
-      impactRadiusKm: 1.3,
-      reportSources: ["Seismic Net", "Radio"],
-      recommendedAction: "Dispatch rapid damage assessment teams.",
-      mediaUrl: "https://via.placeholder.com/150/F43F5E/FFFFFF?text=Quake",
-    },
-    {
-      id: "INC-006",
-      type: "Power Outage",
-      severity: "Medium",
-      status: "Crew En Route",
-      location: "Brgy. Bagong Silang",
-      coordinates: INCIDENT_COORDINATES["Brgy. Bagong Silang"],
-      time: "25m ago",
-      citizenReports: 8,
-      aiHazardScore: 0.54,
-      aiSummary:
-        "Grid load shift detected; expect restoration within 40 minutes.",
-      riskBand: "Amber",
-      impactRadiusKm: 0.7,
-      reportSources: ["Call Center", "Utility"],
-      recommendedAction: "Activate backup generators for clinic cluster.",
-      mediaUrl: "https://via.placeholder.com/150/10B981/FFFFFF?text=Outage",
-    },
-    {
-      id: "INC-007",
-      type: "Medical Emergency",
-      severity: "High",
-      status: "Triage Requested",
-      location: "Brgy. Bayan",
-      coordinates: INCIDENT_COORDINATES["Brgy. Bayan"],
-      time: "30m ago",
-      citizenReports: 14,
-      aiHazardScore: 0.76,
-      aiSummary:
-        "Crowd density rising; deploy additional medics within 10 minutes.",
-      riskBand: "Red",
-      impactRadiusKm: 0.9,
-      reportSources: ["LGU Hotline", "Responder Radio"],
-      recommendedAction: "Coordinate ambulance staging and triage tent.",
-      mediaUrl: "https://via.placeholder.com/150/FFB300/FFFFFF?text=Medical",
-    },
-  ];
-
-  const initialResponders = [
-    {
-      id: "R-001",
-      name: "Team Alpha",
-      status: "Available",
-      members: 3,
-      location: "Brgy. Malanday Station",
-      lastActive: "2m ago",
-      specialization: ["Flood", "Medical"],
-      coordinates: { lat: 14.6795, lng: 121.0452 },
-      currentAssignment: null,
-      etaMinutes: null,
-    },
-    {
-      id: "R-002",
-      name: "Team Bravo",
-      status: "En Route",
-      members: 4,
-      location: "Brgy. Concepcion Depot",
-      lastActive: "5m ago",
-      specialization: ["Fire", "Technical Rescue"],
-      coordinates: { lat: 14.671, lng: 121.05 },
-      currentAssignment: "INC-002",
-      etaMinutes: 4,
-    },
-    {
-      id: "R-003",
-      name: "Team Charlie",
-      status: "On Scene",
-      members: 2,
-      location: "Brgy. Sto. Nino Ridge",
-      lastActive: "10m ago",
-      specialization: ["Medical", "Evacuation"],
-      coordinates: { lat: 14.665, lng: 121.035 },
-      currentAssignment: "INC-003",
-      etaMinutes: 2,
-    },
-    {
-      id: "R-004",
-      name: "Team Delta",
-      status: "Available",
-      members: 5,
-      location: "Brgy. Bayan Hub",
-      lastActive: "15m ago",
-      specialization: ["Search & Rescue", "Medical"],
-      coordinates: { lat: 14.673, lng: 121.04 },
-      currentAssignment: null,
-      etaMinutes: null,
-    },
-    {
-      id: "R-005",
-      name: "Team Echo",
-      status: "Off Duty",
-      members: 3,
-      location: "Central Base",
-      lastActive: "1h ago",
-      specialization: ["Fire", "Earthquake Response"],
-      coordinates: { lat: 14.667, lng: 121.043 },
-      currentAssignment: null,
-      etaMinutes: null,
-    },
-  ];
-
-  const initialFacilities = [
-    {
-      id: "FAC-001",
-      type: "Hospital",
-      name: "Marikina Valley Medical Center",
-      address: "Sumulong Hwy, Brgy. Sto. Nino",
-      hotline: "+63 2 9485 6789",
-      status: "Open",
-      notes: "Capable of handling mass casualty triage",
-      coordinates: { lat: 14.6689, lng: 121.0489 },
-      lastUpdated: "2025-09-22T04:30:00Z",
-    },
-    {
-      id: "FAC-002",
-      type: "Police Station",
-      name: "Marikina Central Police HQ",
-      address: "JP Rizal St, Brgy. Sta. Elena",
-      hotline: "(02) 571-1234",
-      status: "Open",
-      notes: "Rapid deployment unit on standby",
-      coordinates: { lat: 14.6524, lng: 121.0431 },
-      lastUpdated: "2025-09-22T03:55:00Z",
-    },
-    {
-      id: "FAC-003",
-      type: "Fire Station",
-      name: "Bureau of Fire Protection - Marikina",
-      address: "P. Burgos St, Brgy. San Roque",
-      hotline: "(02) 646-2000",
-      status: "Open",
-      notes: "Two pumpers available, one aerial ladder",
-      coordinates: { lat: 14.6558, lng: 121.0438 },
-      lastUpdated: "2025-09-22T03:10:00Z",
-    },
-    {
-      id: "FAC-004",
-      type: "Evacuation Center",
-      name: "Malanday Elementary Gymnasium",
-      address: "P. Herrera St, Brgy. Malanday",
-      hotline: "+63 917 567 4455",
-      status: "At Capacity",
-      notes: "Requesting additional food packs",
-      coordinates: { lat: 14.6812, lng: 121.0405 },
-      lastUpdated: "2025-09-22T04:05:00Z",
-    },
-  ];
-
-  const [activeIncidents, setActiveIncidents] = useState(
-    initialIncidents.map(enrichIncidentWithGeo)
-  );
-  const [responders, setResponders] = useState(initialResponders);
-  const [coreFacilities, setCoreFacilities] = useState(initialFacilities);
+  // State for UI controls
   const [showAllIncidents, setShowAllIncidents] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [typeFilter, setTypeFilter] = useState("All");
   const [severityFilter, setSeverityFilter] = useState("All");
   const [viewMode, setViewMode] = useState("list"); // "list" or "map"
 
+  const responders = responderDirectory;
   const userRole = "LGU";
-
   const INITIAL_INCIDENT_DISPLAY_COUNT = 2;
+
+  const kpis = [
+    { label: "Active Reports", value: kpiSummary.activeReports, trend: "+0" },
+    { label: "Pending", value: kpiSummary.pending, trend: "" },
+    { label: "Resolved Today", value: kpiSummary.resolvedToday, trend: "" },
+    { label: "Responders", value: kpiSummary.availableResponders, trend: "" },
+  ];
+
+  const handleAssign = (incidentId) => {
+    if (!incidentId) return;
+    openAssignSheet(incidentId);
+  };
+
+  const handleOpenDetail = (incidentId) => {
+    if (!incidentId) return;
+    openIncidentDetail(incidentId);
+    closeIncidentPopup();
+  };
+
+  const handleFacilityUpdate = (facility) => {
+    if (!facility) return;
+    upsertFacility(facility);
+  };
+
+  const handleFacilityAdd = (facility) => {
+    if (!facility) return;
+    upsertFacility({ ...facility, id: facility.id || generateFacilityId() });
+  };
+
+  const handleFacilityRemove = (facilityId) => {
+    if (!facilityId) return;
+    removeFacility(facilityId);
+  };
+
+  const currentIncidents = useMemo(() => {
+    const now = Date.now();
+    return incidents.filter((incident) => {
+      if (!incident.snoozedUntil) {
+        return true;
+      }
+      const wakeTime = new Date(incident.snoozedUntil).getTime();
+      return Number.isFinite(wakeTime) ? wakeTime <= now : true;
+    });
+  }, [incidents]);
 
   const incidentTypes = [
     "All",
@@ -432,43 +235,24 @@ export default function Dashboard() {
   const severityLevels = ["All", "Low", "Medium", "High"];
 
   const addIncident = (incident) => {
-    const prepared = enrichIncidentWithGeo({
+    if (!incident) {
+      return;
+    }
+    const prepared = {
+      id: incident.id || `INC-${Date.now()}`,
       ...incident,
       time: incident.time || "Just now",
-    });
-    setActiveIncidents((prev) => [prepared, ...prev]);
+    };
+    registerIncident(prepared);
     showIncidentPopup(prepared);
   };
 
   const handleSnooze = (id) => {
-    setActiveIncidents((prev) => prev.filter((inc) => inc.id !== id));
-    closeIncidentPopup();
-  };
-
-  const handleFacilityUpdate = (facilityId, updates) => {
-    let updatedFacility = null;
-    setCoreFacilities((prev) =>
-      prev.map((facility) => {
-        if (facility.id !== facilityId) {
-          return facility;
-        }
-        updatedFacility = {
-          ...facility,
-          ...updates,
-          lastUpdated: new Date().toISOString(),
-        };
-        return updatedFacility;
-      })
-    );
-
-    if (updatedFacility && updates.status) {
-      addAlert({
-        id: `facility-${facilityId}-${Date.now()}`,
-        msg: `${updatedFacility.name} marked ${updates.status}`,
-        time: "Just now",
-        type: "System",
-      });
+    if (!id) {
+      return;
     }
+    snoozeIncident(id);
+    closeIncidentPopup();
   };
 
   const generateFacilityId = () => {
@@ -476,171 +260,6 @@ export default function Dashboard() {
       .toString()
       .padStart(3, "0");
     return `FAC-${Date.now()}-${suffix}`;
-  };
-
-  const handleFacilityAdd = (facility) => {
-    if (!facility) return;
-    const coordinates = facility.coordinates || {};
-    const lat = Number(coordinates.lat);
-    const lng = Number(coordinates.lng);
-    const prepared = {
-      id: facility.id || generateFacilityId(),
-      type: facility.type?.trim() || "Facility",
-      name: facility.name?.trim() || "Unnamed site",
-      address: facility.address?.trim() || "Address pending",
-      hotline: facility.hotline?.trim() || "",
-      status: facility.status || "Open",
-      notes: facility.notes?.trim() || "",
-      coordinates: {
-        lat: Number.isFinite(lat) ? lat : DEFAULT_COORDINATE.lat,
-        lng: Number.isFinite(lng) ? lng : DEFAULT_COORDINATE.lng,
-      },
-      lastUpdated: new Date().toISOString(),
-    };
-    setCoreFacilities((prev) => {
-      const filtered = prev.filter((facility) => facility.id !== prepared.id);
-      return [prepared, ...filtered];
-    });
-    addAlert({
-      id: `facility-${prepared.id}`,
-      msg: `${prepared.type}: ${prepared.name} added`,
-      time: "Just now",
-      type: "System",
-    });
-  };
-
-  const handleFacilityRemove = (facilityId) => {
-    if (!facilityId) return;
-    const target = coreFacilities.find((facility) => facility.id === facilityId);
-    if (!target) {
-      return;
-    }
-    setCoreFacilities((prev) => prev.filter((facility) => facility.id !== facilityId));
-    addAlert({
-      id: `facility-removed-${facilityId}`,
-      msg: `${target.name} removed from map`,
-      time: "Just now",
-      type: "System",
-    });
-  };
-
-  const handleAssign = (id, responder = null) => {
-    const foundIncident = activeIncidents.find((inc) => inc.id === id);
-    if (!foundIncident) {
-      return;
-    }
-
-    let resolvedResponder = responder;
-    let resolvedEta = responder?.etaMinutes ?? null;
-
-    if (!resolvedResponder) {
-      const suggestion = pickResponderForIncident(foundIncident, responders);
-      if (suggestion) {
-        resolvedResponder = suggestion.responder;
-        resolvedEta = suggestion.etaMinutes;
-      }
-    }
-
-    if (!resolvedResponder) {
-      const incidentLabel = `${foundIncident.type} in ${foundIncident.location}`;
-      addAlert({
-        id: assign--,
-        msg: `${incidentLabel} queued: no available team. Review in Management.`,
-        time: "Just now",
-        type: "System",
-      });
-      closeIncidentPopup();
-      return;
-    }
-
-    const responderStatusLabel =
-      resolvedResponder.status === "On Scene" ? "On Scene" : "En Route";
-
-    setActiveIncidents((prev) =>
-      prev.map((inc) =>
-        inc.id === id
-          ? {
-              ...inc,
-              status: `Assigned to ${resolvedResponder.name}`,
-              assignedResponder: {
-                id: resolvedResponder.id,
-                name: resolvedResponder.name,
-                status: responderStatusLabel,
-                etaMinutes:
-                  resolvedEta ??
-                  resolvedResponder.etaMinutes ??
-                  inc.etaMinutes ??
-                  null,
-              },
-              etaMinutes:
-                resolvedEta ??
-                resolvedResponder.etaMinutes ??
-                inc.etaMinutes ??
-                null,
-            }
-          : inc
-      )
-    );
-
-    setResponders((prev) =>
-      prev.map((team) =>
-        team.id === resolvedResponder.id
-          ? {
-              ...team,
-              status: responderStatusLabel,
-              currentAssignment: id,
-              etaMinutes: resolvedEta ?? team.etaMinutes ?? 10,
-              lastActive: "Just now",
-            }
-          : team
-      )
-    );
-
-    const incidentLabel = `${foundIncident.type} in ${foundIncident.location}`;
-
-    addAlert({
-      id: assign--,
-      msg: `${resolvedResponder.name} assigned to ${incidentLabel}.`,
-      time: "Just now",
-      type: "System",
-    });
-    closeIncidentPopup();
-  };
-
-  const handleResponderStatusChange = (responderId, newStatus) => {
-    setResponders((prev) =>
-      prev.map((team) =>
-        team.id === responderId
-          ? {
-              ...team,
-              status: newStatus,
-              currentAssignment:
-                newStatus === "Available" || newStatus === "Off Duty"
-                  ? null
-                  : team.currentAssignment,
-              lastActive: "Just now",
-            }
-          : team
-      )
-    );
-
-    setActiveIncidents((prev) =>
-      prev.map((incident) =>
-        incident.assignedResponder?.id === responderId
-          ? {
-              ...incident,
-              status:
-                newStatus === "Available" || newStatus === "Off Duty"
-                  ? "Awaiting Dispatch"
-                  : incident.status,
-              assignedResponder: {
-                ...incident.assignedResponder,
-                status: newStatus,
-              },
-            }
-          : incident
-      )
-    );
   };
 
   const handleBroadcastAlert = (payload) => {
@@ -776,13 +395,13 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {activeIncidents.length > 0 ? (
+        {currentIncidents.length > 0 ? (
           <div>
             {viewMode === "list" ? (
               <div className="space-y-3">
                 {(showAllIncidents
-                  ? activeIncidents
-                  : activeIncidents.slice(0, INITIAL_INCIDENT_DISPLAY_COUNT)
+                  ? currentIncidents
+                  : currentIncidents.slice(0, INITIAL_INCIDENT_DISPLAY_COUNT)
                 )
                   .filter((i) => typeFilter === "All" || i.type === typeFilter)
                   .filter(
@@ -799,7 +418,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <MapView
-                activeIncidents={activeIncidents
+                activeIncidents={currentIncidents
                   .filter((i) => typeFilter === "All" || i.type === typeFilter)
                   .filter(
                     (i) =>
@@ -810,14 +429,12 @@ export default function Dashboard() {
                 viewerRole={userRole}
                 onAssign={handleAssign}
                 onFacilityUpdate={handleFacilityUpdate}
-                onFacilityAdd={handleFacilityAdd}
-                onFacilityRemove={handleFacilityRemove}
-                onIncidentSelect={showIncidentPopup}
+                onIncidentSelect={(incident) => incident && handleOpenDetail(incident.id)}
               />
             )}
 
             {viewMode === "list" &&
-              activeIncidents.length > INITIAL_INCIDENT_DISPLAY_COUNT && (
+              currentIncidents.length > INITIAL_INCIDENT_DISPLAY_COUNT && (
                 <div className="mt-4">
                   <button
                     onClick={() => setShowAllIncidents((prev) => !prev)}
@@ -826,7 +443,7 @@ export default function Dashboard() {
                     {showAllIncidents
                       ? "See Less"
                       : `See More (${
-                          activeIncidents.length -
+                          currentIncidents.length -
                           INITIAL_INCIDENT_DISPLAY_COUNT
                         })`}
                   </button>
@@ -859,8 +476,15 @@ export default function Dashboard() {
           onClose={closeIncidentPopup}
           onSnooze={() => handleSnooze(popupIncident.id)}
           onAssign={() => handleAssign(popupIncident.id)}
+          onOpen={() => handleOpenDetail(popupIncident.id)}
         />
       )}
     </div>
   );
 }
+
+
+
+
+
+

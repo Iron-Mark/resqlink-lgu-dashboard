@@ -1,4 +1,5 @@
-﻿import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useIncidentContext } from "../context/IncidentContext";
 import { MapPinIcon } from "@heroicons/react/24/solid";
 import {
   MapContainer,
@@ -308,6 +309,20 @@ export default function MapView({
     });
   }, [incidents]);
 
+  const { assignmentRoutes: contextRoutes = [] } = useIncidentContext();
+
+  const assignmentRoutes = useMemo(() => {
+    if (!contextRoutes.length) {
+      return [];
+    }
+    const incidentIds = new Set(incidents.map((item) => item.id));
+    return contextRoutes.filter((route) => {
+      if (!route?.path?.length) {
+        return false;
+      }
+      return incidentIds.has(route.incidentId);
+    });
+  }, [contextRoutes, incidents]);
   const [selectedIncidentId, setSelectedIncidentId] = useState(() =>
     incidents.length ? incidents[0].id : null
   );
@@ -338,6 +353,7 @@ export default function MapView({
   const [showHazards, setShowHazards] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showFacilities, setShowFacilities] = useState(true);
+  const [showRoutes, setShowRoutes] = useState(true);
   const [facilityVisibility, setFacilityVisibility] = useState(() => {
     const visibility = {};
     coreFacilities.forEach((facility) => {
@@ -588,9 +604,6 @@ export default function MapView({
     const incident = incidents.find((inc) => inc.id === incidentId);
     if (!incident) return;
     setSelectedIncidentId(incidentId);
-    if (onIncidentSelect) {
-      onIncidentSelect(incident);
-    }
   };
 
   const handleAssignResponder = (responder) => {
@@ -603,13 +616,23 @@ export default function MapView({
     const incident = incidents.find((inc) => inc.id === incidentId);
     if (!incident) return;
     setSelectedIncidentId(incidentId);
-    if (onIncidentSelect) {
-      onIncidentSelect(incident);
-    }
     if (autoFocus) {
       setMapCenter([incident.lat, incident.lng]);
     }
   };
+
+  const handleViewIncidentDetails = useCallback(
+    (incidentId) => {
+      if (!onIncidentSelect) {
+        return;
+      }
+      const target = incidents.find((item) => item.id === incidentId);
+      if (target) {
+        onIncidentSelect(target);
+      }
+    },
+    [incidents, onIncidentSelect]
+  );
 
   const wrapperClassName = isFullScreen
     ? "fixed inset-0 z-50 flex flex-col overflow-hidden bg-ui-surface px-4 py-4 sm:px-6"
@@ -644,6 +667,12 @@ export default function MapView({
     triggerHaptic();
     setShowHazards((prev) => !prev);
   };
+
+  const handleToggleRoutes = () => {
+    triggerHaptic();
+    setShowRoutes((prev) => !prev);
+  };
+
 
   const handleToggleResponders = () => {
     triggerHaptic();
@@ -796,6 +825,12 @@ export default function MapView({
               icon={Radar}
               label="Hazard rings"
               onClick={handleToggleHazards}
+            />
+            <TogglePill
+              active={showRoutes}
+              icon={Activity}
+              label="Assignment routes"
+              onClick={handleToggleRoutes}
             />
             <TogglePill
               active={showResponders}
@@ -1152,6 +1187,19 @@ export default function MapView({
                   </Marker>
                 ))}
 
+                {showRoutes && assignmentRoutes.map((route) => (
+                  <Polyline
+                    key={`${route.incidentId}-${route.responderId}`}
+                    positions={route.path}
+                    pathOptions={{
+                      color: getSeverityColor(route.severity || "Medium"),
+                      weight: 3,
+                      dashArray: "6 6",
+                      opacity: 0.7,
+                    }}
+                  />
+                ))}
+
                 {showResponders &&
                   responderMarkers.map((responder) => (
                     <Marker
@@ -1196,6 +1244,12 @@ export default function MapView({
               <LegendDot color="bg-red-500" label="High" />
               <LegendDot color="bg-orange-500" label="Medium" />
               <LegendDot color="bg-blue-500" label="Low" />
+              {showRoutes && assignmentRoutes.length > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="h-1 w-5 rounded-full border border-dashed border-brand-primary" />
+                  Assignment route
+                </span>
+              )}
               {showHazards && (
                 <LegendDot
                   color="bg-brand-primary/20 border border-brand-primary"
@@ -1234,6 +1288,7 @@ export default function MapView({
                     onAssign={handleAssignResponder}
                     nearestFacilities={nearestFacilities}
                     onFacilityFocus={focusFacility}
+                    onViewDetails={handleViewIncidentDetails}
                     variant="sheet"
                   />
                   {sortedIncidents.length > 1 && (
@@ -1256,6 +1311,7 @@ export default function MapView({
                 availableResponders={availableResponders}
                 onAssign={handleAssignResponder}
                 nearestFacilities={nearestFacilities}
+                onViewDetails={handleViewIncidentDetails}
                 onFacilityFocus={focusFacility}
               />
 
@@ -1560,6 +1616,7 @@ function FocusIncidentCard({
   onAssign,
   nearestFacilities = [],
   onFacilityFocus,
+  onViewDetails,
   variant = "default",
 }) {
   const baseClass =
@@ -1575,6 +1632,8 @@ function FocusIncidentCard({
     );
   }
 
+  const incidentRef = incident?.id ?? null;
+
   return (
     <div className={baseClass}>
       <div className="flex items-start justify-between gap-3">
@@ -1587,9 +1646,20 @@ function FocusIncidentCard({
             <span className="truncate">{incident.location}</span>
           </div>
         </div>
-        <span className="rounded-full bg-brand-primary/10 px-3 py-1 text-xs font-semibold text-brand-primary">
-          {incident.status}
-        </span>
+        <div className="flex flex-col items-end gap-2">
+          <span className="rounded-full bg-brand-primary/10 px-3 py-1 text-xs font-semibold text-brand-primary">
+            {incident.status}
+          </span>
+          {onViewDetails && incidentRef && (
+            <button
+              type="button"
+              onClick={() => onViewDetails(incidentRef)}
+              className="rounded-full border border-brand-primary px-3 py-1 text-xs font-semibold text-brand-primary transition hover:bg-brand-primary/10"
+            >
+              View detail
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2 text-center text-xs font-medium">
@@ -1796,3 +1866,8 @@ function IncidentQueue({
     </div>
   );
 }
+
+
+
+
+

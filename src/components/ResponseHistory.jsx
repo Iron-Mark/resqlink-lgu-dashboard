@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useIncidentContext } from "../context/IncidentContext";
 import {
   CalendarDays,
   Filter,
@@ -78,6 +79,7 @@ const severities = ["All", "Low", "Medium", "High"];
 const outcomes = ["All", "Resolved", "Contained", "Closed", "Escalated"];
 
 export default function ResponseHistory() {
+  const { history, openIncidentDetail } = useIncidentContext();
   const [filters, setFilters] = useState({
     timeframe: "7d",
     type: "All",
@@ -88,9 +90,10 @@ export default function ResponseHistory() {
   const [quickNotes, setQuickNotes] = useState({});
   const [selectedDate, setSelectedDate] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const historySource = history.length ? history : historyRecords;
 
   const filteredHistory = useMemo(() => {
-    return historyRecords.filter((record) => {
+    return historySource.filter((record) => {
       const matchesType = filters.type === "All" || record.type === filters.type;
       const matchesSeverity = filters.severity === "All" || record.severity === filters.severity;
       const matchesOutcome = filters.outcome === "All" || record.outcome === filters.outcome;
@@ -98,7 +101,7 @@ export default function ResponseHistory() {
         !filters.search.trim() ||
         record.id.toLowerCase().includes(filters.search.toLowerCase()) ||
         record.barangay.toLowerCase().includes(filters.search.toLowerCase()) ||
-        record.assignedResponder.toLowerCase().includes(filters.search.toLowerCase());
+        (record.assignedResponder ?? "").toLowerCase().includes(filters.search.toLowerCase());
 
       if (!matchesType || !matchesSeverity || !matchesOutcome || !matchesSearch) {
         return false;
@@ -113,7 +116,7 @@ export default function ResponseHistory() {
       if (filters.timeframe === "30d") return diffHours <= 24 * 30;
       return true;
     });
-  }, [filters]);
+  }, [filters, historySource]);
 
   const groupedByDay = useMemo(() => {
     const groups = new Map();
@@ -228,10 +231,7 @@ export default function ResponseHistory() {
                 return (
                   <button
                     key={day}
-                    onClick={() => {
-                      setSelectedDate(day);
-                      setExpandedId(null);
-                    }}
+                    onClick={() => setSelectedDate(day)}
                     className={`min-w-[72px] flex-1 rounded-2xl border px-2 py-2 text-center transition ${
                       isActive
                         ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
@@ -257,6 +257,11 @@ export default function ResponseHistory() {
                 onToggle={() => setExpandedId((prev) => (prev === record.id ? null : record.id))}
                 quickNotes={quickNotes[record.id] ?? []}
                 onAddNote={(note) => handleAddNote(record.id, note)}
+                onViewIncident={
+                  openIncidentDetail
+                    ? () => openIncidentDetail(record.incidentId ?? record.id)
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -289,64 +294,86 @@ function SelectFilter({ label, value, options, onChange }) {
   );
 }
 
-function CompactHistoryCard({ record, expanded, onToggle, quickNotes, onAddNote }) {
+function CompactHistoryCard({ record, expanded, onToggle, quickNotes, onAddNote, onViewIncident }) {
   const [draftNote, setDraftNote] = useState("");
   const closedTime = new Date(record.date).toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
+  const incidentRef = record.incidentId ?? record.id;
+  const mediaItems = Array.isArray(record.media) ? record.media : [];
+  const afterAction = record.aar ?? { worked: "Not documented", improve: "Not documented", actions: [] };
+  const actionItems = Array.isArray(afterAction.actions) ? afterAction.actions : [];
 
   return (
     <div className="rounded-2xl border border-ui-border bg-ui-background p-3 shadow-sm">
-      <button
-        onClick={onToggle}
-        className="flex w-full items-center justify-between text-left"
-      >
-        <div>
-          <p className="text-sm font-semibold text-ui-text">{record.id}</p>
-          <p className="text-xs text-ui-subtext">{record.barangay} · {closedTime}</p>
-        </div>
-        <div className="flex items-center gap-2 text-[11px]">
-          <span className="rounded-full bg-brand-primary/10 px-2 py-0.5 font-semibold text-brand-primary">
-            {record.type}
-          </span>
-          <span className="rounded-full bg-status-medium/10 px-2 py-0.5 font-semibold text-status-medium">
-            {record.severity}
-          </span>
-          <span className="rounded-full bg-status-resolved/10 px-2 py-0.5 font-semibold text-status-resolved">
-            {record.outcome}
-          </span>
-        </div>
-      </button>
+      <div className="flex items-start justify-between gap-3">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex flex-1 items-center justify-between text-left"
+        >
+          <div>
+            <p className="text-sm font-semibold text-ui-text">{record.id}</p>
+            <p className="text-xs text-ui-subtext">
+              {record.barangay} - {closedTime}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className="rounded-full bg-brand-primary/10 px-2 py-0.5 font-semibold text-brand-primary">
+              {record.type}
+            </span>
+            <span className="rounded-full bg-status-medium/10 px-2 py-0.5 font-semibold text-status-medium">
+              {record.severity}
+            </span>
+            <span className="rounded-full bg-status-resolved/10 px-2 py-0.5 font-semibold text-status-resolved">
+              {record.outcome}
+            </span>
+          </div>
+        </button>
+        {onViewIncident && incidentRef && (
+          <button
+            type="button"
+            onClick={() => onViewIncident(incidentRef)}
+            className="rounded-lg border border-brand-primary px-3 py-1 text-xs font-semibold text-brand-primary transition hover:bg-brand-primary/10"
+          >
+            View
+          </button>
+        )}
+      </div>
 
       <p className={`mt-2 text-xs leading-snug text-ui-text/90 ${expanded ? "" : "line-clamp-3"}`}>
-        {record.aiSummary}
+        {record.aiSummary ?? "AI summary not available for this record."}
       </p>
 
       {expanded && (
         <div className="mt-3 space-y-3 text-sm">
           <div className="grid gap-2 sm:grid-cols-3">
             <InfoTile icon={Clock} label="Closed" value={new Date(record.date).toLocaleString()} />
-            <InfoTile icon={Users} label="Assigned" value={record.assignedResponder} />
-            <InfoTile icon={FileText} label="People assisted" value={record.peopleAssisted} />
+            <InfoTile icon={Users} label="Assigned" value={record.assignedResponder ?? "Unassigned"} />
+            <InfoTile icon={FileText} label="People assisted" value={record.peopleAssisted ?? "--"} />
           </div>
 
           <div className="space-y-1 rounded-xl border border-ui-border bg-white/80 p-3 text-xs text-ui-text/90">
             <p className="font-semibold uppercase tracking-wide text-ui-subtext">After-action notes</p>
-            <p><span className="font-semibold">Worked:</span> {record.aar.worked}</p>
-            <p><span className="font-semibold">Improve:</span> {record.aar.improve}</p>
             <p>
-              <span className="font-semibold">Actions:</span> {record.aar.actions.length ? record.aar.actions.join(", ") : "Nothing recorded"}
+              <span className="font-semibold">Worked:</span> {afterAction.worked}
+            </p>
+            <p>
+              <span className="font-semibold">Improve:</span> {afterAction.improve}
+            </p>
+            <p>
+              <span className="font-semibold">Actions:</span> {actionItems.length ? actionItems.join(", ") : "Nothing recorded"}
             </p>
           </div>
 
-          {record.media.length > 0 && (
+          {mediaItems.length > 0 && (
             <div className="space-y-2 text-xs">
               <div className="flex items-center gap-2 font-semibold text-ui-text">
                 <Paperclip className="h-4 w-4" /> Attachments
               </div>
               <div className="flex flex-wrap gap-2 text-brand-primary">
-                {record.media.map((item) => (
+                {mediaItems.map((item) => (
                   <span key={item} className="rounded-full bg-brand-primary/10 px-3 py-1">
                     {item}
                   </span>
@@ -368,6 +395,7 @@ function CompactHistoryCard({ record, expanded, onToggle, quickNotes, onAddNote 
                 className="w-full rounded-xl border border-ui-border bg-ui-background px-3 py-2 text-sm"
               />
               <button
+                type="button"
                 onClick={() => {
                   onAddNote(draftNote);
                   setDraftNote("");
@@ -404,3 +432,14 @@ function InfoTile({ icon: Icon, label, value }) {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+

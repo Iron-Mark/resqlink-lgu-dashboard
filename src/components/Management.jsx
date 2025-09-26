@@ -7,7 +7,8 @@ import {
   BellRing,
   MapPin,
 } from "lucide-react";
-import Responders, { defaultResponders } from "./Responders";
+import Responders from "./Responders";
+import { useIncidentContext } from "../context/IncidentContext";
 
 const shiftTemplates = [
   {
@@ -72,26 +73,26 @@ const safetySignals = {
 };
 
 export default function Management() {
-  const [directory, setDirectory] = useState(defaultResponders);
+  const { responders, updateResponderStatus } = useIncidentContext();
   const [agencyFilter, setAgencyFilter] = useState("All");
   const [skillFilter, setSkillFilter] = useState("All");
   const [search, setSearch] = useState("");
 
   const agencies = useMemo(
-    () => ["All", ...new Set(defaultResponders.map((responder) => responder.agency))],
-    []
+    () => ["All", ...new Set(responders.map((responder) => responder.agency))],
+    [responders]
   );
 
   const skills = useMemo(() => {
     const allSkills = new Set();
-    defaultResponders.forEach((responder) => {
+    responders.forEach((responder) => {
       responder.specialization.forEach((skill) => allSkills.add(skill));
     });
     return ["All", ...allSkills];
-  }, []);
+  }, [responders]);
 
   const filteredResponders = useMemo(() => {
-    return directory.filter((responder) => {
+    return responders.filter((responder) => {
       const matchesAgency = agencyFilter === "All" || responder.agency === agencyFilter;
       const matchesSkill =
         skillFilter === "All" || responder.specialization.includes(skillFilter);
@@ -101,14 +102,10 @@ export default function Management() {
         responder.location.toLowerCase().includes(search.toLowerCase());
       return matchesAgency && matchesSkill && matchesSearch;
     });
-  }, [directory, agencyFilter, skillFilter, search]);
+    }, [responders, agencyFilter, skillFilter, search]);
 
   const handleStatusChange = (responderId, newStatus) => {
-    setDirectory((prev) =>
-      prev.map((responder) =>
-        responder.id === responderId ? { ...responder, status: newStatus, lastActive: "Just now" } : responder
-      )
-    );
+    updateResponderStatus(responderId, newStatus);
   };
 
   return (
@@ -280,3 +277,4 @@ export default function Management() {
     </div>
   );
 }
+

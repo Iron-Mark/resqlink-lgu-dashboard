@@ -1,5 +1,8 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { OfflineBanner, useOnlineStatus } from "./components/OfflineBanner";
+import IncidentDetailView from "./components/IncidentDetailView";
+import AssignResponderSheet from "./components/AssignResponderSheet";
+import { useIncidentContext } from "./context/IncidentContext";
 import Dashboard from "./components/Dashboard";
 import { BellIcon } from "@heroicons/react/24/outline";
 import { useNotifications } from "./context/NotificationContext";
@@ -31,6 +34,22 @@ const NAV_META = {
 export default function App() {
   const isOnline = useOnlineStatus();
   const { getUnreadAlertCount } = useNotifications();
+  const {
+    incidents,
+    detailIncidentId,
+    closeIncidentDetail,
+    assignState,
+    closeAssignSheet,
+    getSuggestedResponders,
+    responders,
+    assignResponder,
+    initiateCall,
+    callLog,
+    openAssignSheet,
+    markIncidentResolved,
+    markIncidentCancelled,
+    clearIncidentConflict,
+  } = useIncidentContext();
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeTab, setActiveTab] = useState("dashboard");
 
@@ -50,6 +69,57 @@ export default function App() {
         return <Dashboard />;
     }
   }, [activeTab]);
+
+  const detailIncident = useMemo(() => {
+    return incidents.find((item) => item.id === detailIncidentId) ?? null;
+  }, [incidents, detailIncidentId]);
+
+  const assignIncident = useMemo(() => {
+    if (!assignState.incidentId) {
+      return null;
+    }
+    return incidents.find((item) => item.id === assignState.incidentId) ?? null;
+  }, [assignState.incidentId, incidents]);
+
+  const suggestionList = useMemo(() => {
+    if (!assignState.open || !assignState.incidentId) {
+      return [];
+    }
+    return getSuggestedResponders(assignState.incidentId);
+  }, [assignState.open, assignState.incidentId, getSuggestedResponders]);
+
+  const incidentCallLog = useMemo(() => {
+    if (!detailIncidentId) {
+      return [];
+    }
+    const entries = callLog
+      .filter((entry) => entry.incidentId === detailIncidentId)
+      .map((entry) => {
+        const responder = responders.find((item) => item.id === entry.responderId);
+        return {
+          ...entry,
+          responderName: responder?.name ?? entry.responderId,
+          responderStatus: responder?.status ?? null,
+        };
+      })
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    return entries;
+  }, [callLog, detailIncidentId, responders]);
+
+  const handleAssignFromSheet = (responder, options = {}) => {
+    if (!assignState.incidentId || !responder?.id) {
+      return;
+    }
+    assignResponder(assignState.incidentId, responder.id, options);
+  };
+
+  const handleCallFromSheet = (responder, note) => {
+    if (!assignState.incidentId || !responder?.id) {
+      return;
+    }
+    initiateCall(assignState.incidentId, responder.id, note);
+  };
+
 
   return (
     <div className="min-h-screen bg-ui-background font-sans pb-24">
@@ -109,6 +179,40 @@ export default function App() {
         onNavigate={setActiveTab}
         badges={{ dashboard: unreadAlertsCount || undefined }}
       />
+
+      {detailIncident && (
+        <IncidentDetailView
+          incident={detailIncident}
+          callLog={incidentCallLog}
+          onClose={closeIncidentDetail}
+          onAssign={() => openAssignSheet(detailIncident.id)}
+          onMarkResolved={() => {
+            markIncidentResolved(detailIncident.id);
+            closeIncidentDetail();
+          }}
+          onMarkCancelled={() => {
+            markIncidentCancelled(detailIncident.id);
+            closeIncidentDetail();
+          }}
+          onResolveConflict={() => clearIncidentConflict(detailIncident.id)}
+        />
+      )}
+
+      <AssignResponderSheet
+        incident={assignIncident}
+        isOpen={assignState.open}
+        onClose={closeAssignSheet}
+        suggestions={suggestionList}
+        responders={responders}
+        onAssign={handleAssignFromSheet}
+        onCall={handleCallFromSheet}
+      />
     </div>
   );
 }
+
+
+
+
+
+
