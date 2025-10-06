@@ -1,4 +1,4 @@
-import {
+﻿import {
   createContext,
   useCallback,
   useContext,
@@ -530,11 +530,20 @@ const initialHistory = [
     type: "Flood",
     severity: "High",
     outcome: "Resolved",
-    decisionType: "After Action",
+    decisionType: "Lifecycle",
     date: "2025-09-20T08:45:00Z",
     barangay: "Brgy. Malanday",
     assignedResponder: "Miguel Santos",
     peopleAssisted: 48,
+    citizenReports: 23,
+    aiHazardScore: 0.87,
+    riskBand: "Red",
+    metrics: {
+      dispatchMinutes: 6,
+      onSceneMinutes: 11,
+      resolutionMinutes: 54,
+    },
+    supportUnits: ["Rescue Boat Delta", "Barangay Volunteers"],
     media: ["river-rising.jpg", "evac-route.mp4"],
     aiSummary:
       "Swift evacuation executed before waters breached first-floor homes. Temporary shelter established at Barangay Gym within 20 minutes.",
@@ -555,11 +564,20 @@ const initialHistory = [
     type: "Fire",
     severity: "Medium",
     outcome: "Contained",
-    decisionType: "After Action",
+    decisionType: "Containment",
     date: "2025-09-18T19:12:00Z",
     barangay: "Brgy. Concepcion",
     assignedResponder: "Leah Ramirez",
     peopleAssisted: 12,
+    citizenReports: 9,
+    aiHazardScore: 0.65,
+    riskBand: "Amber",
+    metrics: {
+      dispatchMinutes: 3,
+      onSceneMinutes: 8,
+      resolutionMinutes: 37,
+    },
+    supportUnits: ["BFP Ladder 4", "Volunteer Bucket Brigade"],
     media: ["warehouse-fire.jpg"],
     aiSummary:
       "Localized warehouse fire isolated to eastern bay. Foam deployment prevented spread to adjacent LPG storage.",
@@ -577,20 +595,119 @@ const initialHistory = [
     type: "Medical",
     severity: "Low",
     outcome: "Closed",
-    decisionType: "After Action",
+    decisionType: "Lifecycle",
     date: "2025-09-15T11:05:00Z",
     barangay: "Brgy. San Roque",
     assignedResponder: "Paolo Fernandez",
     peopleAssisted: 6,
+    citizenReports: 5,
+    aiHazardScore: 0.32,
+    riskBand: "Blue",
+    metrics: {
+      dispatchMinutes: 5,
+      onSceneMinutes: 12,
+      resolutionMinutes: 26,
+    },
+    supportUnits: ["EMS Alpha"],
     media: [],
     aiSummary:
       "Heat exhaustion cluster at construction site. IV rehydration administered on-site, no transport required.",
     aar: {
       worked: "Quick triage table set up by EMS lead.",
       improve: "Need portable canopy for shade.",
-      actions: [],
+      actions: ["Procure compact canopy"],
     },
     notes: "Forward triage best practice documented.",
+  },
+  {
+    id: "INC-144",
+    incidentId: "INC-144",
+    type: "Vehicle Accident",
+    severity: "Medium",
+    outcome: "Resolved",
+    decisionType: "Lifecycle",
+    date: "2025-09-14T16:25:00Z",
+    barangay: "Brgy. Sto. Nino",
+    assignedResponder: "Paolo Fernandez",
+    peopleAssisted: 9,
+    citizenReports: 8,
+    aiHazardScore: 0.41,
+    riskBand: "Blue",
+    metrics: {
+      dispatchMinutes: 4,
+      onSceneMinutes: 9,
+      resolutionMinutes: 28,
+    },
+    supportUnits: ["Traffic Sector 3", "Tow Crew Bravo"],
+    media: ["cleared-lane.jpg"],
+    aiSummary:
+      "Multi-vehicle collision cleared within half an hour; traffic flow normalised after coordinated towing.",
+    aar: {
+      worked: "Joint traffic-police channel kept intersections open.",
+      improve: "Include barangay marshals earlier for crowd control.",
+      actions: ["Refresh road-closure playbook"],
+    },
+    notes: "Recommended reflective cones for night deployments.",
+  },
+  {
+    id: "INC-138",
+    incidentId: "INC-138",
+    type: "Power Outage",
+    severity: "Medium",
+    outcome: "Resolved",
+    decisionType: "Lifecycle",
+    date: "2025-09-12T03:18:00Z",
+    barangay: "Brgy. Bagong Silang",
+    assignedResponder: "Noel Garcia",
+    peopleAssisted: 21,
+    citizenReports: 17,
+    aiHazardScore: 0.56,
+    riskBand: "Amber",
+    metrics: {
+      dispatchMinutes: 6,
+      onSceneMinutes: 18,
+      resolutionMinutes: 42,
+    },
+    supportUnits: ["MERALCO Crew 7", "Barangay Tanong"],
+    media: ["restored-feed.jpg"],
+    aiSummary:
+      "Isolated feeder trip rerouted; backup gensets sustained clinic operations while linemen swapped the damaged fuse block.",
+    aar: {
+      worked: "Rapid switch to contingency power for health facilities.",
+      improve: "Stock additional portable lights for cordoning.",
+      actions: ["Coordinate with utility for spare parts cache"],
+    },
+    notes: "Pre-positioned generator prevented cold-chain spoilage.",
+  },
+  {
+    id: "INC-133",
+    incidentId: "INC-133",
+    type: "Landslide",
+    severity: "High",
+    outcome: "Cancelled",
+    decisionType: "Cancellation",
+    date: "2025-09-09T09:55:00Z",
+    barangay: "Brgy. Ibaba",
+    assignedResponder: "Amina Cruz",
+    peopleAssisted: 0,
+    citizenReports: 6,
+    aiHazardScore: 0.64,
+    riskBand: "Amber",
+    metrics: {
+      dispatchMinutes: 7,
+      onSceneMinutes: 16,
+      resolutionMinutes: 19,
+    },
+    supportUnits: ["GeoTech Scout Team"],
+    media: ["stabilised-slope.jpg"],
+    aiSummary:
+      "Slope sensors stabilised after rainfall subsided; no active debris flow observed by geotech scouts.",
+    aar: {
+      worked: "Quick validation with drone imagery avoided unnecessary evacuations.",
+      improve: "Need clearer trigger thresholds for re-opening roads.",
+      actions: ["Publish updated slope-trigger matrix"],
+    },
+    notes: "Call stood down after confirming no secondary slide.",
   },
 ];
 const initialState = {
@@ -1369,6 +1486,14 @@ function buildHistoryEntry(incident, overrides = {}) {
   const media = (incident.mediaGallery ?? [])
     .slice(0, 3)
     .map((item) => item.url);
+  const hazardScore =
+    typeof incident.aiHazardScore === "number" ? incident.aiHazardScore : null;
+  const citizenReports = Number.isFinite(incident.citizenReports)
+    ? incident.citizenReports
+    : null;
+  const riskBand = incident.riskBand ?? null;
+  const metrics = overrides.metrics ?? incident.metrics ?? null;
+  const supportUnits = overrides.supportUnits ?? incident.supportUnits ?? [];
   return {
     id: `${incident.id}-${Date.now()}`,
     incidentId: incident.id,
@@ -1378,6 +1503,11 @@ function buildHistoryEntry(incident, overrides = {}) {
     barangay: incident.location,
     assignedResponder: incident.assignedResponder?.name ?? "Unassigned",
     peopleAssisted,
+    citizenReports,
+    aiHazardScore: hazardScore,
+    riskBand,
+    metrics,
+    supportUnits,
     media,
     aiSummary: incident.aiSummary,
     aar: {
@@ -1772,3 +1902,5 @@ function isSameDay(a, b) {
     a.getDate() === b.getDate()
   );
 }
+
+
