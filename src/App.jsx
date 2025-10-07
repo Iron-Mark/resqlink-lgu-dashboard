@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { OfflineBanner, useOnlineStatus } from "./components/OfflineBanner";
 import IncidentDetailView from "./components/IncidentDetailView";
 import AssignResponderSheet from "./components/AssignResponderSheet";
 import { useIncidentContext } from "./context/IncidentContext";
 import Dashboard from "./components/Dashboard";
-import { BellIcon } from "@heroicons/react/24/outline";
+import { BellIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import { useNotifications } from "./context/NotificationContext";
 import AlertFeed from "./components/AlertFeed";
 import BottomNav from "./components/BottomNav";
@@ -52,6 +52,7 @@ export default function App() {
   } = useIncidentContext();
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [assignmentToast, setAssignmentToast] = useState(null);
 
   const unreadAlertsCount = getUnreadAlertCount();
   const navInfo = NAV_META[activeTab];
@@ -119,6 +120,21 @@ export default function App() {
     }
     initiateCall(assignState.incidentId, responder.id, note);
   };
+
+  useEffect(() => {
+    if (!assignState.lastAction || assignState.open) {
+      return;
+    }
+    setAssignmentToast(assignState.lastAction);
+  }, [assignState.lastAction, assignState.open]);
+
+  useEffect(() => {
+    if (!assignmentToast) {
+      return;
+    }
+    const timeout = setTimeout(() => setAssignmentToast(null), 4000);
+    return () => clearTimeout(timeout);
+  }, [assignmentToast]);
 
 
   return (
@@ -206,7 +222,41 @@ export default function App() {
         responders={responders}
         onAssign={handleAssignFromSheet}
         onCall={handleCallFromSheet}
+        recentAssignment={assignState.lastAction}
       />
+
+      {assignmentToast && (
+        <AssignmentToast
+          data={assignmentToast}
+          onDismiss={() => setAssignmentToast(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AssignmentToast({ data, onDismiss }) {
+  const responderName = data?.responderName ?? "Responder";
+  const incidentType = data?.incidentType ?? "incident";
+  const location = data?.location ?? "the field";
+
+  return (
+    <div className="pointer-events-none fixed bottom-24 left-0 right-0 z-[999] flex justify-center px-4">
+      <div className="pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-2xl border border-brand-primary bg-ui-surface px-4 py-3 shadow-lg">
+        <CheckCircleIcon className="h-6 w-6 text-status-resolved" />
+        <div className="flex-1 text-sm text-ui-text">
+          <p className="font-semibold text-ui-text">Responder en route</p>
+          <p className="mt-0.5 text-xs text-ui-subtext">
+            {responderName} is heading to {incidentType} in {location}.
+          </p>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="text-xs font-semibold text-brand-primary transition hover:text-brand-primary/80"
+        >
+          Dismiss
+        </button>
+      </div>
     </div>
   );
 }

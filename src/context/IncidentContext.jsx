@@ -6,6 +6,7 @@
   useReducer,
 } from "react";
 import { useNotifications } from "./NotificationContext";
+import { buildPlaceholderImage } from "../utils/placeholder";
 
 const IncidentContext = createContext(null);
 
@@ -135,7 +136,10 @@ const initialIncidentSeeds = [
     reportSources: ["Hotline", "Mobile App"],
     recommendedAction:
       "Pre-evacuate riverside households and stage rescue boats.",
-    mediaUrl: "https://via.placeholder.com/150/EF4444/FFFFFF?text=Flood",
+    mediaUrl: buildPlaceholderImage({
+      text: "Flood",
+      background: "#EF4444",
+    }),
     occurredAt: "2025-09-22T05:15:00Z",
   },
   {
@@ -160,7 +164,10 @@ const initialIncidentSeeds = [
       status: "En Route",
       etaMinutes: 4,
     },
-    mediaUrl: "https://via.placeholder.com/150/F59E0B/FFFFFF?text=Fire",
+    mediaUrl: buildPlaceholderImage({
+      text: "Fire",
+      background: "#F59E0B",
+    }),
     occurredAt: "2025-09-22T05:12:00Z",
   },
   {
@@ -178,7 +185,10 @@ const initialIncidentSeeds = [
     impactRadiusKm: 0.4,
     reportSources: ["Citizen App"],
     recommendedAction: "Coordinate towing and clear debris.",
-    mediaUrl: "https://via.placeholder.com/150/3B82F6/000000?text=Accident",
+    mediaUrl: buildPlaceholderImage({
+      text: "Accident",
+      background: "#3B82F6",
+    }),
     occurredAt: "2025-09-22T05:07:00Z",
   },
   {
@@ -196,7 +206,10 @@ const initialIncidentSeeds = [
     impactRadiusKm: 1.1,
     reportSources: ["Hotline", "Barangay Net"],
     recommendedAction: "Close access road and deploy geotech team.",
-    mediaUrl: "https://via.placeholder.com/150/8B5CF6/FFFFFF?text=Landslide",
+    mediaUrl: buildPlaceholderImage({
+      text: "Landslide",
+      background: "#8B5CF6",
+    }),
     occurredAt: "2025-09-22T05:02:00Z",
     flags: {
       conflict: {
@@ -222,7 +235,10 @@ const initialIncidentSeeds = [
     impactRadiusKm: 1.3,
     reportSources: ["Seismic Net", "Radio"],
     recommendedAction: "Dispatch rapid damage assessment teams.",
-    mediaUrl: "https://via.placeholder.com/150/F43F5E/FFFFFF?text=Quake",
+    mediaUrl: buildPlaceholderImage({
+      text: "Quake",
+      background: "#F43F5E",
+    }),
     occurredAt: "2025-09-22T04:57:00Z",
     flags: {
       offlineCache: {
@@ -247,7 +263,10 @@ const initialIncidentSeeds = [
     impactRadiusKm: 0.7,
     reportSources: ["Call Center", "Utility"],
     recommendedAction: "Activate backup generators for clinic cluster.",
-    mediaUrl: "https://via.placeholder.com/150/10B981/FFFFFF?text=Outage",
+    mediaUrl: buildPlaceholderImage({
+      text: "Outage",
+      background: "#10B981",
+    }),
     occurredAt: "2025-09-22T04:52:00Z",
     flags: {
       duplicate: {
@@ -273,7 +292,10 @@ const initialIncidentSeeds = [
     impactRadiusKm: 0.9,
     reportSources: ["LGU Hotline", "Responder Radio"],
     recommendedAction: "Coordinate ambulance staging and triage tent.",
-    mediaUrl: "https://via.placeholder.com/150/FFB300/FFFFFF?text=Medical",
+    mediaUrl: buildPlaceholderImage({
+      text: "Medical",
+      background: "#FFB300",
+    }),
     occurredAt: "2025-09-22T04:47:00Z",
   },
 ];
@@ -721,6 +743,7 @@ const initialState = {
     incidentId: null,
     preselectResponderId: null,
     mode: "assign",
+    lastAction: null,
   },
   callLog: [],
 };
@@ -739,6 +762,7 @@ function incidentReducer(state, action) {
           incidentId: action.payload.incidentId,
           preselectResponderId: action.payload.responderId ?? null,
           mode: action.payload.mode ?? "assign",
+          lastAction: null,
         },
       };
     case "CLOSE_ASSIGN":
@@ -749,6 +773,7 @@ function incidentReducer(state, action) {
           incidentId: null,
           preselectResponderId: null,
           mode: "assign",
+          lastAction: null,
         },
       };
     case "ASSIGN_RESPONDER":
@@ -1262,12 +1287,13 @@ function buildMediaGallery(seed) {
   if (Array.isArray(seed.mediaGallery) && seed.mediaGallery.length) {
     return seed.mediaGallery;
   }
-  const baseColor = getSeverityColorBlock(seed.severity);
+  const baseColor = `#${getSeverityColorBlock(seed.severity)}`;
   const fallback =
     seed.mediaUrl ||
-    `https://via.placeholder.com/150/${baseColor}/FFFFFF?text=${encodeURIComponent(
-      seed.type
-    )}`;
+    buildPlaceholderImage({
+      text: seed.type ?? "Incident",
+      background: baseColor,
+    });
   return [
     {
       id: `${seed.id}-media-hero`,
@@ -1278,15 +1304,19 @@ function buildMediaGallery(seed) {
     {
       id: `${seed.id}-media-context`,
       type: "image",
-      url: `https://via.placeholder.com/320/${baseColor}/FFFFFF?text=${encodeURIComponent(
-        seed.location
-      )}`,
+      url: buildPlaceholderImage({
+        text: seed.location ?? "Incident location",
+        background: baseColor,
+      }),
       caption: `${seed.location} context`,
     },
     {
       id: `${seed.id}-media-asset`,
       type: "image",
-      url: "https://via.placeholder.com/320/0F172A/FFFFFF?text=Asset+Map",
+      url: buildPlaceholderImage({
+        text: "Asset Map",
+        background: "#0F172A",
+      }),
       caption: "Asset map preview",
     },
   ];
@@ -1648,10 +1678,16 @@ function assignResponderReducer(state, payload) {
     responders,
     history: historyEntry ? [historyEntry, ...state.history] : state.history,
     assignState: {
-      open: false,
-      incidentId: null,
-      preselectResponderId: null,
-      mode: "assign",
+      ...state.assignState,
+      preselectResponderId: responderId,
+      lastAction: {
+        incidentId,
+        responderId,
+        responderName: responder.name,
+        incidentType: incident.type,
+        location: incident.location,
+        at: nowIso,
+      },
     },
   };
 }
@@ -1902,5 +1938,7 @@ function isSameDay(a, b) {
     a.getDate() === b.getDate()
   );
 }
+
+
 
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNotifications } from "../context/NotificationContext";
 import { useIncidentContext } from "../context/IncidentContext";
+import { buildPlaceholderImage } from "../utils/placeholder";
 
 import KPI from "./KPI";
 import IncidentCard from "./IncidentCard";
@@ -158,6 +159,7 @@ export default function Dashboard() {
     registerIncident,
     snoozeIncident,
     openAssignSheet,
+    assignResponder,
     updateResponderStatus,
     upsertFacility,
     removeFacility,
@@ -184,8 +186,24 @@ export default function Dashboard() {
     { label: "Responders", value: kpiSummary.availableResponders, trend: "" },
   ];
 
-  const handleAssign = (incidentId) => {
+  const handleAssign = (incidentId, responder = null, options = {}) => {
     if (!incidentId) return;
+    if (responder?.id) {
+      const etaFromOptions =
+        Number.isFinite(options.etaMinutes) && options.etaMinutes > 0
+          ? options.etaMinutes
+          : null;
+      const etaFromResponder =
+        Number.isFinite(responder.etaMinutes) && responder.etaMinutes > 0
+          ? responder.etaMinutes
+          : null;
+      assignResponder(incidentId, responder.id, {
+        ...options,
+        etaMinutes: etaFromOptions ?? etaFromResponder ?? null,
+        decisionSource: options.decisionSource ?? "Map dispatch",
+      });
+      return;
+    }
     openAssignSheet(incidentId);
   };
 
@@ -280,7 +298,10 @@ export default function Dashboard() {
         severity: "High",
         location: "Brgy. Tanong",
         time: "1m ago",
-        mediaUrl: "https://via.placeholder.com/150/800080/FFFFFF?text=Collapse",
+        mediaUrl: buildPlaceholderImage({
+          text: "Collapse",
+          background: "#800080",
+        }),
       };
       addIncident(newIncident);
     }, 5000);

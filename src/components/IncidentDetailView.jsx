@@ -37,7 +37,7 @@ export default function IncidentDetailView({
 }) {
   const [activeTab, setActiveTab] = useState("summary");
   const [showPII, setShowPII] = useState(false);
-  const [confirmAction, setConfirmAction] = useState(null);
+  const [pendingLifecycleAction, setPendingLifecycleAction] = useState(null);
 
   const severityBadge = SEVERITY_CLASS[incident.severity] || SEVERITY_CLASS.Medium;
   const hazardPercent = Math.round((incident.aiHazardScore ?? 0) * 100);
@@ -65,24 +65,24 @@ export default function IncidentDetailView({
   };
 
   const handleResolve = () => {
-    setConfirmAction("resolve");
+    setPendingLifecycleAction("resolve");
   };
 
   const handleCancel = () => {
-    setConfirmAction("cancel");
+    setPendingLifecycleAction("cancel");
   };
 
   const handleConfirmAction = () => {
-    if (confirmAction === "resolve") {
+    if (pendingLifecycleAction === "resolve") {
       onMarkResolved?.();
-    } else if (confirmAction === "cancel") {
+    } else if (pendingLifecycleAction === "cancel") {
       onMarkCancelled?.();
     }
-    setConfirmAction(null);
+    setPendingLifecycleAction(null);
   };
 
   const handleDismissConfirm = () => {
-    setConfirmAction(null);
+    setPendingLifecycleAction(null);
   };
 
   return (
@@ -374,9 +374,9 @@ function AssignTab({ incident, onAssign, callLog = [] }) {
         <PlayCircleIcon className="h-5 w-5" />
         Open Assign Sheet
       </button>
-      {confirmAction && (
+      {pendingLifecycleAction && (
         <ConfirmActionModal
-          action={confirmAction}
+          action={pendingLifecycleAction}
           incidentTitle={incidentDescriptor}
           onConfirm={handleConfirmAction}
           onDismiss={handleDismissConfirm}
@@ -554,4 +554,3 @@ function ConfirmActionModal({ action, incidentTitle, onConfirm, onDismiss }) {
     </div>
   );
 }
-

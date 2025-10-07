@@ -47,6 +47,23 @@ const riskBandStyles = {
   default: { bg: "bg-ui-background", text: "text-ui-subtext" },
 };
 
+const severityPriority = {
+  High: 3,
+  Medium: 2,
+  Low: 1,
+};
+
+const severityAccentClasses = {
+  High: { dot: "bg-status-high", text: "text-status-high" },
+  Medium: { dot: "bg-status-medium", text: "text-status-medium" },
+  Low: { dot: "bg-brand-primary", text: "text-brand-primary" },
+  default: { dot: "bg-ui-border", text: "text-ui-subtext" },
+};
+
+function getSeverityAccent(severity) {
+  return severityAccentClasses[severity] ?? severityAccentClasses.default;
+}
+
 function getChipClasses(styleMap, key) {
   const style = styleMap[key] ?? styleMap.default;
   return `${style.bg} ${style.text}`;
@@ -197,6 +214,48 @@ export default function ResponseHistory() {
     return groups;
   }, [filteredHistory]);
 
+  const daySummaries = useMemo(() => {
+    const map = new Map();
+    groupedByDay.forEach((records, day) => {
+      let topSeverity = null;
+      let topRank = -1;
+      let resolvedCount = 0;
+      let cancelledCount = 0;
+      let hazardTotal = 0;
+      let hazardCount = 0;
+
+      records.forEach((record) => {
+        const rank = severityPriority[record.severity] ?? -1;
+        if (rank > topRank) {
+          topRank = rank;
+          topSeverity = record.severity ?? null;
+        }
+
+        if (record.outcome === "Resolved") resolvedCount += 1;
+        if (record.outcome === "Cancelled") cancelledCount += 1;
+
+        if (Number.isFinite(record.aiHazardScore)) {
+          hazardTotal += record.aiHazardScore;
+          hazardCount += 1;
+        }
+      });
+
+      const averageHazard = hazardCount
+        ? Math.round((hazardTotal / hazardCount) * 100)
+        : null;
+      const followUpCount = Math.max(records.length - resolvedCount - cancelledCount, 0);
+
+      map.set(day, {
+        total: records.length,
+        topSeverity,
+        resolvedCount,
+        followUpCount,
+        averageHazard,
+      });
+    });
+    return map;
+  }, [groupedByDay]);
+
   const orderedDays = useMemo(() => {
     return Array.from(groupedByDay.keys()).sort((a, b) => new Date(b) - new Date(a));
   }, [groupedByDay]);
@@ -293,7 +352,7 @@ export default function ResponseHistory() {
             <span>{orderedDays.length} day{orderedDays.length === 1 ? "" : "s"}</span>
           </div>
           <div className="-mx-4 overflow-x-auto px-4">
-            <div className="flex gap-2 pb-2">
+            <div className="flex snap-x snap-mandatory gap-2 pb-2">
               {orderedDays.map((day) => {
                 const date = new Date(day);
                 const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
@@ -301,11 +360,25 @@ export default function ResponseHistory() {
                 const month = date.toLocaleDateString(undefined, { month: "short" });
                 const count = groupedByDay.get(day)?.length ?? 0;
                 const isActive = selectedDate === day;
+                const summary = daySummaries.get(day);
+                const severityAccent = getSeverityAccent(summary?.topSeverity);
+                const hazardDisplay =
+                  typeof summary?.averageHazard === "number"
+                    ? `${summary.averageHazard}% avg risk`
+                    : null;
+                const resolvedLabel =
+                  summary && typeof summary.resolvedCount === "number"
+                    ? `${summary.resolvedCount} resolved`
+                    : `${count} record${count !== 1 ? "s" : ""}`;
+                const followUpLabel =
+                  summary && summary.followUpCount > 0
+                    ? `${summary.followUpCount} follow-up`
+                    : null;
                 return (
                   <button
                     key={day}
                     onClick={() => setSelectedDate(day)}
-                    className={`min-w-[72px] flex-1 rounded-2xl border px-2 py-2 text-center transition ${
+                    className={`min-w-[92px] flex-1 snap-center rounded-2xl border px-2 py-2 text-center transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-primary ${
                       isActive
                         ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
                         : "border-ui-border bg-ui-background text-ui-text"
@@ -314,7 +387,19 @@ export default function ResponseHistory() {
                     <div className="text-xs uppercase tracking-wide">{weekday}</div>
                     <div className="text-lg font-semibold">{dayNum}</div>
                     <div className="text-[10px] text-ui-subtext">{month}</div>
-                    <div className="mt-1 text-[10px] font-medium">{count} record{count !== 1 ? "s" : ""}</div>
+                    <div className="mt-2 flex items-center justify-center gap-1 text-[10px] font-medium">
+                      <span className={`h-1.5 w-1.5 rounded-full ${severityAccent.dot}`} />
+                      <span className={severityAccent.text}>{summary?.topSeverity ?? "—"}</span>
+                    </div>
+                    <div className="mt-1 text-[10px] text-ui-subtext">{resolvedLabel}</div>
+                    {followUpLabel && (
+                      <div className="text-[10px] text-ui-subtext">{followUpLabel}</div>
+                    )}
+                    {hazardDisplay && (
+                      <div className="mt-1 text-[10px] font-semibold text-brand-primary">
+                        {hazardDisplay}
+                      </div>
+                    )}
                   </button>
                 );
               })}
@@ -410,13 +495,13 @@ function CompactHistoryCard({
   const riskClasses = riskBand ? getChipClasses(riskBandStyles, riskBand) : null;
 
   const afterAction = {
-    worked: aar.worked ?? "Field notes not captured.",
-    improve: aar.improve ?? "Improvement items pending.",
+    worked: aar.worked ?? 'Field notes not captured.',
+    improve: aar.improve ?? 'Improvement items pending.',
     actions: Array.isArray(aar.actions) ? aar.actions : [],
   };
   const mediumActions = afterAction.actions.length
-    ? afterAction.actions.join(", ")
-    : "Nothing recorded";
+    ? afterAction.actions.join(', ')
+    : 'Nothing recorded';
   const mediaItems = media.filter(Boolean);
 
   const metricChips = [];
@@ -432,91 +517,132 @@ function CompactHistoryCard({
 
   const [draftNote, setDraftNote] = useState("");
 
+  const handleCardToggle = () => {
+    if (onToggle) onToggle();
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleCardToggle();
+    }
+  };
+
+  const incidentLabel = incidentId ?? id;
+  const summaryId = `history-details-${id}`;
+
   return (
-    <div className="rounded-2xl border border-ui-border bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={onToggle}
-          className="flex flex-1 flex-col text-left"
-        >
+    <article
+      className={`group relative overflow-hidden rounded-2xl border bg-white p-4 shadow-sm transition ${
+        expanded
+          ? "border-brand-primary/60 shadow-md ring-2 ring-brand-primary/20"
+          : "border-ui-border"
+      }`}
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
+      aria-controls={summaryId}
+      onClick={handleCardToggle}
+      onKeyDown={handleKeyDown}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-semibold text-brand-primary">
-            <span>{incidentId ?? id}</span>
+            <span>{incidentLabel}</span>
             {decisionType && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-brand-primary px-2 py-0.5 text-[11px] font-semibold text-brand-primary">
-                <BadgeCheck className="h-3 w-3" />
-                {decisionType}
-              </span>
+              <DetailChip
+                icon={BadgeCheck}
+                label={decisionType}
+                toneClass="border border-brand-primary bg-white text-brand-primary"
+                dense
+              />
             )}
           </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-ui-subtext">
-            <MapPin className="h-3.5 w-3.5" />
-            <span>{barangay ?? "Location pending"}</span>
-            <span className="text-ui-border">•</span>
-            <span>{closedTime}</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-ui-subtext">
+            <span className="inline-flex items-center gap-1">
+              <MapPin className="h-3.5 w-3.5" />
+              <span>{barangay ?? 'Location pending'}</span>
+            </span>
+            <span className="text-ui-border">&bull;</span>
+            <span className="inline-flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" />
+              <span>{closedTime}</span>
+            </span>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="rounded-full bg-brand-primary/10 px-2 py-0.5 font-semibold text-brand-primary">
-              {type}
-            </span>
-            <span className={`rounded-full px-2 py-0.5 font-semibold ${severityClasses}`}>
-              {severity ?? "Unknown"}
-            </span>
-            <span className={`rounded-full px-2 py-0.5 font-semibold ${outcomeClasses}`}>
-              {outcome ?? "—"}
-            </span>
-            {riskClasses && (
-              <span className={`rounded-full px-2 py-0.5 font-semibold ${riskClasses}`}>
-                {riskBand}
-              </span>
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            {type && (
+              <DetailChip
+                icon={Activity}
+                label={type}
+                toneClass="bg-brand-primary/10 text-brand-primary"
+              />
+            )}
+            {severity && (
+              <DetailChip
+                icon={Shield}
+                label={severity}
+                toneClass={severityClasses}
+              />
+            )}
+            {outcome && (
+              <DetailChip
+                icon={BadgeCheck}
+                label={outcome}
+                toneClass={outcomeClasses}
+              />
+            )}
+            {riskBand && (
+              <DetailChip
+                icon={Radio}
+                label={`${riskBand} risk`}
+                toneClass={riskClasses ?? "bg-ui-background text-ui-subtext"}
+              />
             )}
           </div>
-        </button>
+        </div>
         {onViewIncident && (
           <button
             type="button"
-            onClick={onViewIncident}
-            className="rounded-lg border border-brand-primary px-3 py-1 text-xs font-semibold text-brand-primary transition hover:bg-brand-primary/10"
+            onClick={(event) => {
+              event.stopPropagation();
+              onViewIncident();
+            }}
+            className="relative z-10 inline-flex items-center gap-1 rounded-lg border border-brand-primary px-3 py-1 text-xs font-semibold text-brand-primary transition hover:bg-brand-primary/10"
           >
-            View
+            Open
           </button>
         )}
       </div>
 
-      <p className={`mt-2 text-xs leading-snug text-ui-text/90 ${expanded ? "" : "line-clamp-3"}`}>
+      <p className={`mt-2 text-sm leading-snug text-ui-text/90 ${expanded ? "" : "line-clamp-3"}`}>
         {aiSummary ?? "AI summary not available for this record."}
       </p>
 
       {expanded && (
-        <div className="mt-3 space-y-3 text-sm">
+        <div id={summaryId} className="mt-4 space-y-4 text-sm">
           <div className="grid gap-2 sm:grid-cols-2">
             <InfoTile icon={Clock} label="Decision logged" value={closedStamp} />
             <InfoTile
               icon={Users}
               label="Lead responder"
-              value={assignedResponder ?? "Unassigned"}
+              value={assignedResponder ?? 'Unassigned'}
             />
-            <InfoTile
-              icon={FileText}
-              label="People assisted"
-              value={numberOrDash(peopleAssisted)}
-            />
-            {decisionType && (
-              <InfoTile icon={BadgeCheck} label="Decision" value={decisionType} />
-            )}
+            <InfoTile icon={FileText} label="People assisted" value={numberOrDash(peopleAssisted)} />
+            {decisionType && <InfoTile icon={BadgeCheck} label="Decision" value={decisionType} />}
           </div>
 
-          {(hazardDisplay !== "—" || citizenDisplay !== "—" || riskBand) && (
+          {(hazardDisplay !== '-' || citizenDisplay !== '-' || riskBand) && (
             <div className="grid gap-2 sm:grid-cols-3">
-              {hazardDisplay !== "—" && (
+              {hazardDisplay !== '-' && (
                 <InfoTile icon={Activity} label="AI hazard" value={hazardDisplay} />
               )}
-              {citizenDisplay !== "—" && (
+              {citizenDisplay !== '-' && (
                 <InfoTile icon={Radio} label="Citizen reports" value={citizenDisplay} />
               )}
-              {riskBand && (
-                <InfoTile icon={Shield} label="Risk band" value={riskBand} />
-              )}
+              {riskBand && <InfoTile icon={Shield} label="Risk band" value={riskBand} />}
             </div>
           )}
 
@@ -593,20 +719,36 @@ function CompactHistoryCard({
               <textarea
                 value={draftNote}
                 onChange={(event) => setDraftNote(event.target.value)}
+                onClick={(event) => event.stopPropagation()}
                 rows={2}
                 placeholder="Log what stood out..."
                 className="w-full rounded-xl border border-ui-border bg-ui-background px-3 py-2 text-sm"
               />
-              <button
-                type="button"
-                onClick={() => {
-                  onAddNote(draftNote);
-                  setDraftNote("");
-                }}
-                className="w-full rounded-lg bg-brand-primary px-3 py-2 text-sm font-semibold text-white"
-              >
-                Save note
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onAddNote(draftNote);
+                    setDraftNote("");
+                  }}
+                  className="flex-1 rounded-lg bg-brand-primary px-3 py-2 text-sm font-semibold text-white"
+                >
+                  Save note
+                </button>
+                {onViewIncident && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onViewIncident();
+                    }}
+                    className="rounded-lg border border-ui-border px-3 py-2 text-sm font-semibold text-ui-text"
+                  >
+                    Full view
+                  </button>
+                )}
+              </div>
             </div>
             {quickNotes.length > 0 && (
               <ul className="space-y-2 text-sm text-ui-text/90">
@@ -620,7 +762,7 @@ function CompactHistoryCard({
           </div>
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -641,6 +783,20 @@ function MetricPill({ label, value }) {
     <span className="inline-flex items-center gap-1 rounded-full bg-brand-primary/10 px-3 py-1 text-[11px] font-semibold text-brand-primary">
       {label}
       <span className="font-bold text-brand-primary/80">{value}</span>
+    </span>
+  );
+}
+
+function DetailChip({ icon: Icon, label, toneClass, dense = false }) {
+  if (!Icon || !label) return null;
+  const visualClass = toneClass ?? "bg-ui-background text-ui-text";
+  const paddingClass = dense ? "px-2 py-0.5" : "px-2.5 py-0.5";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full text-[11px] font-semibold ${paddingClass} ${visualClass}`}
+    >
+      <Icon className="h-3 w-3" />
+      {label}
     </span>
   );
 }

@@ -607,9 +607,16 @@ export default function MapView({
   };
 
   const handleAssignResponder = (responder) => {
-    if (!selectedIncident || !onAssign) return;
+    if (!selectedIncident || !onAssign || !responder?.id) return;
     triggerHaptic(HAPTIC_TOGGLE);
-    onAssign(selectedIncident.id, responder);
+    const etaFromDistance =
+      Number.isFinite(responder.distanceKm) && responder.distanceKm >= 0
+        ? Math.max(3, Math.round(responder.distanceKm * 4))
+        : null;
+    onAssign(selectedIncident.id, responder, {
+      etaMinutes: responder.etaMinutes ?? etaFromDistance ?? undefined,
+      decisionSource: "Map dispatch",
+    });
   };
 
   const focusIncidentFromList = (incidentId) => {
@@ -1782,10 +1789,19 @@ function FocusIncidentCard({
                     {responder.name}
                   </p>
                   <p className="text-xs text-ui-subtext">
-                    {responder.status} ·{" "}
-                    {formatDistanceKm(responder.distanceKm)}
-                    {responder.etaMinutes != null &&
-                      ` · ${responder.etaMinutes} min`}
+                    {responder.status}
+                    {Number.isFinite(responder.distanceKm) && (
+                      <>
+                        {" "}
+                        {"\u2022"} {formatDistanceKm(responder.distanceKm)}
+                      </>
+                    )}
+                    {Number.isFinite(responder.etaMinutes) && (
+                      <>
+                        {" "}
+                        {"\u2022"} {Math.round(responder.etaMinutes)} min
+                      </>
+                    )}
                   </p>
                 </div>
                 <button

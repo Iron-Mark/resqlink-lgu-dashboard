@@ -7,6 +7,7 @@ import {
   PaperAirplaneIcon,
   ClipboardDocumentListIcon,
 } from "@heroicons/react/24/solid";
+import { buildPlaceholderImage } from "../utils/placeholder";
 
 const channelOptions = ["SMS", "Push", "Radio"];
 const MESSAGE_LIMIT = 240;
@@ -242,9 +243,10 @@ const CreateManualIncident = ({ onClose, onAddIncident }) => {
       impactRadiusKm: defaults.impact,
       reportSources: ["Command Center"],
       recommendedAction: "Confirm details with barangay desk.",
-      mediaUrl: `https://via.placeholder.com/150/808080/FFFFFF?text=${trimmedType
-        .split(" ")
-        .join("+")}`,
+      mediaUrl: buildPlaceholderImage({
+        text: trimmedType,
+        background: "#808080",
+      }),
     };
 
     if (onAddIncident) {
@@ -435,3 +437,8 @@ const ActionButton = ({ Icon, label, onClick, className = "" }) => (
     </span>
   </div>
 );
+
+
+
+
+
