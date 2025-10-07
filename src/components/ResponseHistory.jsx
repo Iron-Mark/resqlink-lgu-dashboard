@@ -1,5 +1,6 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useIncidentContext } from "../context/IncidentContext";
+import { XMarkIcon } from "@heroicons/react/24/outline";
 import {
   CalendarDays,
   Filter,
@@ -14,6 +15,8 @@ import {
   MapPin,
   BadgeCheck,
   Timer,
+  List as ListIcon,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 
 const timeframes = [
@@ -99,7 +102,7 @@ function numberOrDash(value) {
 }
 
 export default function ResponseHistory() {
-  const { history, openIncidentDetail } = useIncidentContext();
+  const { history, incidents, openIncidentDetail } = useIncidentContext();
   const [filters, setFilters] = useState({
     timeframe: "7d",
     type: "All",
@@ -110,6 +113,8 @@ export default function ResponseHistory() {
   const [quickNotes, setQuickNotes] = useState({});
   const [selectedDate, setSelectedDate] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [activeView, setActiveView] = useState("list");
+  const [activeRecord, setActiveRecord] = useState(null);
 
   const historySource = useMemo(() => {
     if (!history.length) return [];
@@ -119,6 +124,16 @@ export default function ResponseHistory() {
       return bTime - aTime;
     });
   }, [history]);
+
+  const incidentLookup = useMemo(() => {
+    const map = new Map();
+    incidents.forEach((incident) => {
+      if (incident?.id) {
+        map.set(incident.id, incident);
+      }
+    });
+    return map;
+  }, [incidents]);
 
   const typeOptions = useMemo(() => {
     const values = new Set();
@@ -185,7 +200,12 @@ export default function ResponseHistory() {
         (record.assignedResponder &&
           record.assignedResponder.toLowerCase().includes(query));
 
-      if (!matchesType || !matchesSeverity || !matchesOutcome || !matchesSearch) {
+      if (
+        !matchesType ||
+        !matchesSeverity ||
+        !matchesOutcome ||
+        !matchesSearch
+      ) {
         return false;
       }
 
@@ -243,7 +263,10 @@ export default function ResponseHistory() {
       const averageHazard = hazardCount
         ? Math.round((hazardTotal / hazardCount) * 100)
         : null;
-      const followUpCount = Math.max(records.length - resolvedCount - cancelledCount, 0);
+      const followUpCount = Math.max(
+        records.length - resolvedCount - cancelledCount,
+        0
+      );
 
       map.set(day, {
         total: records.length,
@@ -257,7 +280,9 @@ export default function ResponseHistory() {
   }, [groupedByDay]);
 
   const orderedDays = useMemo(() => {
-    return Array.from(groupedByDay.keys()).sort((a, b) => new Date(b) - new Date(a));
+    return Array.from(groupedByDay.keys()).sort(
+      (a, b) => new Date(b) - new Date(a)
+    );
   }, [groupedByDay]);
 
   useEffect(() => {
@@ -266,7 +291,9 @@ export default function ResponseHistory() {
       setExpandedId(null);
       return;
     }
-    setSelectedDate((prev) => (prev && orderedDays.includes(prev) ? prev : orderedDays[0]));
+    setSelectedDate((prev) =>
+      prev && orderedDays.includes(prev) ? prev : orderedDays[0]
+    );
     setExpandedId(null);
   }, [orderedDays]);
 
@@ -278,162 +305,294 @@ export default function ResponseHistory() {
     }));
   };
 
+  const handleViewRecord = (record) => {
+    if (!record) return;
+    const incidentId = record.incidentId ?? record.id;
+    if (incidentLookup.has(incidentId)) {
+      openIncidentDetail(incidentId, "summary");
+      return;
+    }
+    setActiveRecord(record);
+  };
+
+  useEffect(() => {
+    setExpandedId(null);
+  }, [activeView, selectedDate]);
+
   const dayRecords = selectedDate ? groupedByDay.get(selectedDate) ?? [] : [];
 
-  return (
-    <div className="space-y-4 pb-16">
+  const renderListView = () => {
+    if (!filteredHistory.length) {
+      return (
+        <div className="rounded-2xl bg-ui-surface p-6 text-center text-sm text-ui-subtext shadow">
+          No incidents match the current filters.
+        </div>
+      );
+    }
+
+    return (
       <section className="rounded-2xl bg-ui-surface p-4 shadow space-y-3">
-        <div className="flex items-center gap-2">
-          <CalendarDays className="h-4 w-4 text-brand-primary" />
-          <h2 className="text-xl font-semibold text-ui-text">Response History</h2>
+        <div className="flex items-center gap-2 text-xs font-semibold text-ui-subtext">
+          <ListIcon className="h-4 w-4" />
+          <span>All records</span>
+          <span className="ml-auto text-[11px] font-medium text-ui-subtext">
+            {filteredHistory.length} record
+            {filteredHistory.length === 1 ? "" : "s"}
+          </span>
         </div>
-        <p className="text-sm text-ui-subtext">
-          Review closed and reassigned incidents with the same labels used across the dashboard.
-        </p>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <input
-            type="search"
-            placeholder="Search incident, barangay, or responder"
-            value={filters.search}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, search: event.target.value }))
-            }
-            className="w-full rounded-xl border border-ui-border bg-ui-background px-3 py-2 text-sm"
-          />
-          <div className="flex items-center gap-2 text-xs text-ui-subtext">
-            <Filter className="h-4 w-4" />
-            <div className="flex flex-wrap gap-2">
-              {timeframes.map((timeframe) => (
-                <button
-                  key={timeframe.id}
-                  onClick={() =>
-                    setFilters((prev) => ({ ...prev, timeframe: timeframe.id }))
-                  }
-                  className={`rounded-full px-3 py-1 text-sm transition ${
-                    filters.timeframe === timeframe.id
-                      ? "bg-brand-primary/10 text-brand-primary"
-                      : "bg-ui-background text-ui-subtext"
-                  }`}
-                >
-                  {timeframe.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-3">
-          <SelectFilter
-            label="Type"
-            value={filters.type}
-            options={typeOptions}
-            onChange={(value) => setFilters((prev) => ({ ...prev, type: value }))}
-          />
-          <SelectFilter
-            label="Severity"
-            value={filters.severity}
-            options={severityOptions}
-            onChange={(value) => setFilters((prev) => ({ ...prev, severity: value }))}
-          />
-          <SelectFilter
-            label="Outcome"
-            value={filters.outcome}
-            options={outcomeOptions}
-            onChange={(value) => setFilters((prev) => ({ ...prev, outcome: value }))}
-          />
+        <div className="space-y-3">
+          {filteredHistory.map((record) => (
+            <CompactHistoryCard
+              key={record.id}
+              record={record}
+              expanded={expandedId === record.id}
+              onToggle={() =>
+                setExpandedId((prev) => (prev === record.id ? null : record.id))
+              }
+              quickNotes={quickNotes[record.id] ?? []}
+              onAddNote={(note) => handleAddNote(record.id, note)}
+              onViewIncident={() => handleViewRecord(record)}
+            />
+          ))}
         </div>
       </section>
+    );
+  };
 
-      {orderedDays.length > 0 ? (
-        <section className="rounded-2xl bg-ui-surface p-4 shadow space-y-4">
-          <div className="flex items-center justify-between text-xs text-ui-subtext">
-            <span className="font-semibold uppercase tracking-wide">Calendar view</span>
-            <span>{orderedDays.length} day{orderedDays.length === 1 ? "" : "s"}</span>
-          </div>
-          <div className="-mx-4 overflow-x-auto px-4">
-            <div className="flex snap-x snap-mandatory gap-2 pb-2">
-              {orderedDays.map((day) => {
-                const date = new Date(day);
-                const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
-                const dayNum = date.getDate();
-                const month = date.toLocaleDateString(undefined, { month: "short" });
-                const count = groupedByDay.get(day)?.length ?? 0;
-                const isActive = selectedDate === day;
-                const summary = daySummaries.get(day);
-                const severityAccent = getSeverityAccent(summary?.topSeverity);
-                const hazardDisplay =
-                  typeof summary?.averageHazard === "number"
-                    ? `${summary.averageHazard}% avg risk`
-                    : null;
-                const resolvedLabel =
-                  summary && typeof summary.resolvedCount === "number"
-                    ? `${summary.resolvedCount} resolved`
-                    : `${count} record${count !== 1 ? "s" : ""}`;
-                const followUpLabel =
-                  summary && summary.followUpCount > 0
-                    ? `${summary.followUpCount} follow-up`
-                    : null;
-                return (
-                  <button
-                    key={day}
-                    onClick={() => setSelectedDate(day)}
-                    className={`min-w-[92px] flex-1 snap-center rounded-2xl border px-2 py-2 text-center transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-primary ${
-                      isActive
-                        ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
-                        : "border-ui-border bg-ui-background text-ui-text"
-                    }`}
-                  >
-                    <div className="text-xs uppercase tracking-wide">{weekday}</div>
-                    <div className="text-lg font-semibold">{dayNum}</div>
-                    <div className="text-[10px] text-ui-subtext">{month}</div>
-                    <div className="mt-2 flex items-center justify-center gap-1 text-[10px] font-medium">
-                      <span className={`h-1.5 w-1.5 rounded-full ${severityAccent.dot}`} />
-                      <span className={severityAccent.text}>{summary?.topSeverity ?? "—"}</span>
+  const renderCalendarView = () => {
+    if (!orderedDays.length) {
+      return (
+        <div className="rounded-2xl bg-ui-surface p-6 text-center text-sm text-ui-subtext shadow">
+          No incidents match the current filters.
+        </div>
+      );
+    }
+
+    return (
+      <section className="rounded-2xl bg-ui-surface p-4 shadow space-y-4">
+        <div className="flex items-center justify-between text-xs text-ui-subtext">
+          <span className="font-semibold uppercase tracking-wide">
+            Calendar view
+          </span>
+          <span>
+            {orderedDays.length} day{orderedDays.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="-mx-4 overflow-x-auto px-4">
+          <div className="flex snap-x snap-mandatory gap-2 pb-2">
+            {orderedDays.map((day) => {
+              const date = new Date(day);
+              const weekday = date.toLocaleDateString(undefined, {
+                weekday: "short",
+              });
+              const dayNum = date.getDate();
+              const month = date.toLocaleDateString(undefined, {
+                month: "short",
+              });
+              const count = groupedByDay.get(day)?.length ?? 0;
+              const isActive = selectedDate === day;
+              const summary = daySummaries.get(day);
+              const severityAccent = getSeverityAccent(summary?.topSeverity);
+              const hazardDisplay =
+                typeof summary?.averageHazard === "number"
+                  ? `${summary.averageHazard}% avg risk`
+                  : null;
+              const resolvedLabel =
+                summary && typeof summary.resolvedCount === "number"
+                  ? `${summary.resolvedCount} resolved`
+                  : `${count} record${count !== 1 ? "s" : ""}`;
+              const followUpLabel =
+                summary && summary.followUpCount > 0
+                  ? `${summary.followUpCount} follow-up`
+                  : null;
+              return (
+                <button
+                  key={day}
+                  onClick={() => setSelectedDate(day)}
+                  className={`min-w-[92px] flex-1 snap-center rounded-2xl border px-2 py-2 text-center transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-primary ${
+                    isActive
+                      ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
+                      : "border-ui-border bg-ui-background text-ui-text"
+                  }`}
+                >
+                  <div className="text-xs uppercase tracking-wide">
+                    {weekday}
+                  </div>
+                  <div className="text-lg font-semibold">{dayNum}</div>
+                  <div className="text-[10px] text-ui-subtext">{month}</div>
+                  <div className="mt-2 flex items-center justify-center gap-1 text-[10px] font-medium">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${severityAccent.dot}`}
+                    />
+                    <span className={severityAccent.text}>
+                      {summary?.topSeverity ?? "-"}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[10px] text-ui-subtext">
+                    {resolvedLabel}
+                  </div>
+                  {followUpLabel && (
+                    <div className="text-[10px] text-ui-subtext">
+                      {followUpLabel}
                     </div>
-                    <div className="mt-1 text-[10px] text-ui-subtext">{resolvedLabel}</div>
-                    {followUpLabel && (
-                      <div className="text-[10px] text-ui-subtext">{followUpLabel}</div>
-                    )}
-                    {hazardDisplay && (
-                      <div className="mt-1 text-[10px] font-semibold text-brand-primary">
-                        {hazardDisplay}
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                  )}
+                  {hazardDisplay && (
+                    <div className="mt-1 text-[10px] font-semibold text-brand-primary">
+                      {hazardDisplay}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
+        </div>
 
-          <div className="space-y-3">
-            {dayRecords.map((record) => (
+        <div className="space-y-3">
+          {dayRecords.length > 0 ? (
+            dayRecords.map((record) => (
               <CompactHistoryCard
                 key={record.id}
                 record={record}
                 expanded={expandedId === record.id}
                 onToggle={() =>
-                  setExpandedId((prev) => (prev === record.id ? null : record.id))
+                  setExpandedId((prev) =>
+                    prev === record.id ? null : record.id
+                  )
                 }
                 quickNotes={quickNotes[record.id] ?? []}
                 onAddNote={(note) => handleAddNote(record.id, note)}
-                onViewIncident={
-                  openIncidentDetail
-                    ? () => openIncidentDetail(record.incidentId ?? record.id)
-                    : undefined
-                }
+                onViewIncident={() => handleViewRecord(record)}
               />
-            ))}
+            ))
+          ) : (
+            <div className="rounded-2xl border border-ui-border bg-ui-background p-4 text-sm text-ui-subtext">
+              Select a day to view detailed reports.
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  };
+
+  return (
+    <>
+      <div className="space-y-4 pb-16">
+        <section className="rounded-2xl bg-ui-surface p-4 shadow space-y-3">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-brand-primary" />
+            <h2 className="text-xl font-semibold text-ui-text">
+              Response History
+            </h2>
+          </div>
+          <p className="text-sm text-ui-subtext">
+            Review closed and reassigned incidents with the same labels used
+            across the dashboard.
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input
+              type="search"
+              placeholder="Search incident, barangay, or responder"
+              value={filters.search}
+              onChange={(event) =>
+                setFilters((prev) => ({ ...prev, search: event.target.value }))
+              }
+              className="w-full rounded-xl border border-ui-border bg-ui-background px-3 py-2 text-sm"
+            />
+            <div className="flex items-center gap-2 text-xs text-ui-subtext">
+              <Filter className="h-4 w-4" />
+              <div className="flex flex-wrap gap-2">
+                {timeframes.map((timeframe) => (
+                  <button
+                    key={timeframe.id}
+                    onClick={() =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        timeframe: timeframe.id,
+                      }))
+                    }
+                    className={`rounded-full px-3 py-1 text-sm transition ${
+                      filters.timeframe === timeframe.id
+                        ? "bg-brand-primary/10 text-brand-primary"
+                        : "bg-ui-background text-ui-subtext"
+                    }`}
+                  >
+                    {timeframe.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-3">
+            <SelectFilter
+              label="Type"
+              value={filters.type}
+              options={typeOptions}
+              onChange={(value) =>
+                setFilters((prev) => ({ ...prev, type: value }))
+              }
+            />
+            <SelectFilter
+              label="Severity"
+              value={filters.severity}
+              options={severityOptions}
+              onChange={(value) =>
+                setFilters((prev) => ({ ...prev, severity: value }))
+              }
+            />
+            <SelectFilter
+              label="Outcome"
+              value={filters.outcome}
+              options={outcomeOptions}
+              onChange={(value) =>
+                setFilters((prev) => ({ ...prev, outcome: value }))
+              }
+            />
           </div>
         </section>
-      ) : (
-        <div className="rounded-2xl bg-ui-surface p-6 text-center text-sm text-ui-subtext shadow">
-          {historySource.length === 0
-            ? "No resolved or reassigned incidents yet. They will appear here once logged."
-            : "No incidents match the current filters."}
+
+        <div className="flex rounded-2xl border border-ui-border bg-ui-background p-1">
+          <button
+            type="button"
+            onClick={() => setActiveView("list")}
+            className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${
+              activeView === "list"
+                ? "bg-brand-primary text-white shadow-sm"
+                : "text-ui-subtext hover:text-ui-text"
+            }`}
+          >
+            <span className="inline-flex items-center justify-center gap-2">
+              <ListIcon className="h-4 w-4" />
+              List View
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveView("calendar")}
+            className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${
+              activeView === "calendar"
+                ? "bg-brand-primary text-white shadow-sm"
+                : "text-ui-subtext hover:text-ui-text"
+            }`}
+          >
+            <span className="inline-flex items-center justify-center gap-2">
+              <CalendarIcon className="h-4 w-4" />
+              Calendar View
+            </span>
+          </button>
         </div>
+
+        {activeView === "list" ? renderListView() : renderCalendarView()}
+      </div>
+
+      {activeRecord && (
+        <HistoryDetailModal
+          record={activeRecord}
+          onClose={() => setActiveRecord(null)}
+        />
       )}
-    </div>
+    </>
   );
 }
 
@@ -492,27 +651,38 @@ function CompactHistoryCard({
   const citizenDisplay = numberOrDash(citizenReports);
   const severityClasses = getChipClasses(severityStyles, severity);
   const outcomeClasses = getChipClasses(outcomeStyles, outcome);
-  const riskClasses = riskBand ? getChipClasses(riskBandStyles, riskBand) : null;
+  const riskClasses = riskBand
+    ? getChipClasses(riskBandStyles, riskBand)
+    : null;
 
   const afterAction = {
-    worked: aar.worked ?? 'Field notes not captured.',
-    improve: aar.improve ?? 'Improvement items pending.',
+    worked: aar.worked ?? "Field notes not captured.",
+    improve: aar.improve ?? "Improvement items pending.",
     actions: Array.isArray(aar.actions) ? aar.actions : [],
   };
   const mediumActions = afterAction.actions.length
-    ? afterAction.actions.join(', ')
-    : 'Nothing recorded';
+    ? afterAction.actions.join(", ")
+    : "Nothing recorded";
   const mediaItems = media.filter(Boolean);
 
   const metricChips = [];
   if (Number.isFinite(metrics?.dispatchMinutes)) {
-    metricChips.push({ label: "Dispatch", value: `${metrics.dispatchMinutes} min` });
+    metricChips.push({
+      label: "Dispatch",
+      value: `${metrics.dispatchMinutes} min`,
+    });
   }
   if (Number.isFinite(metrics?.onSceneMinutes)) {
-    metricChips.push({ label: "On scene", value: `${metrics.onSceneMinutes} min` });
+    metricChips.push({
+      label: "On scene",
+      value: `${metrics.onSceneMinutes} min`,
+    });
   }
   if (Number.isFinite(metrics?.resolutionMinutes)) {
-    metricChips.push({ label: "Resolution", value: `${metrics.resolutionMinutes} min` });
+    metricChips.push({
+      label: "Resolution",
+      value: `${metrics.resolutionMinutes} min`,
+    });
   }
 
   const [draftNote, setDraftNote] = useState("");
@@ -564,7 +734,7 @@ function CompactHistoryCard({
           <div className="flex flex-wrap items-center gap-2 text-xs text-ui-subtext">
             <span className="inline-flex items-center gap-1">
               <MapPin className="h-3.5 w-3.5" />
-              <span>{barangay ?? 'Location pending'}</span>
+              <span>{barangay ?? "Location pending"}</span>
             </span>
             <span className="text-ui-border">&bull;</span>
             <span className="inline-flex items-center gap-1">
@@ -608,7 +778,9 @@ function CompactHistoryCard({
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              onViewIncident();
+              if (onViewIncident) {
+                onViewIncident();
+              }
             }}
             className="relative z-10 inline-flex items-center gap-1 rounded-lg border border-brand-primary px-3 py-1 text-xs font-semibold text-brand-primary transition hover:bg-brand-primary/10"
           >
@@ -617,32 +789,60 @@ function CompactHistoryCard({
         )}
       </div>
 
-      <p className={`mt-2 text-sm leading-snug text-ui-text/90 ${expanded ? "" : "line-clamp-3"}`}>
+      <p
+        className={`mt-2 text-sm leading-snug text-ui-text/90 ${
+          expanded ? "" : "line-clamp-3"
+        }`}
+      >
         {aiSummary ?? "AI summary not available for this record."}
       </p>
 
       {expanded && (
         <div id={summaryId} className="mt-4 space-y-4 text-sm">
           <div className="grid gap-2 sm:grid-cols-2">
-            <InfoTile icon={Clock} label="Decision logged" value={closedStamp} />
+            <InfoTile
+              icon={Clock}
+              label="Decision logged"
+              value={closedStamp}
+            />
             <InfoTile
               icon={Users}
               label="Lead responder"
-              value={assignedResponder ?? 'Unassigned'}
+              value={assignedResponder ?? "Unassigned"}
             />
-            <InfoTile icon={FileText} label="People assisted" value={numberOrDash(peopleAssisted)} />
-            {decisionType && <InfoTile icon={BadgeCheck} label="Decision" value={decisionType} />}
+            <InfoTile
+              icon={FileText}
+              label="People assisted"
+              value={numberOrDash(peopleAssisted)}
+            />
+            {decisionType && (
+              <InfoTile
+                icon={BadgeCheck}
+                label="Decision"
+                value={decisionType}
+              />
+            )}
           </div>
 
-          {(hazardDisplay !== '-' || citizenDisplay !== '-' || riskBand) && (
+          {(hazardDisplay !== "-" || citizenDisplay !== "-" || riskBand) && (
             <div className="grid gap-2 sm:grid-cols-3">
-              {hazardDisplay !== '-' && (
-                <InfoTile icon={Activity} label="AI hazard" value={hazardDisplay} />
+              {hazardDisplay !== "-" && (
+                <InfoTile
+                  icon={Activity}
+                  label="AI hazard"
+                  value={hazardDisplay}
+                />
               )}
-              {citizenDisplay !== '-' && (
-                <InfoTile icon={Radio} label="Citizen reports" value={citizenDisplay} />
+              {citizenDisplay !== "-" && (
+                <InfoTile
+                  icon={Radio}
+                  label="Citizen reports"
+                  value={citizenDisplay}
+                />
               )}
-              {riskBand && <InfoTile icon={Shield} label="Risk band" value={riskBand} />}
+              {riskBand && (
+                <InfoTile icon={Shield} label="Risk band" value={riskBand} />
+              )}
             </div>
           )}
 
@@ -653,19 +853,27 @@ function CompactHistoryCard({
               </div>
               <div className="flex flex-wrap gap-2">
                 {metricChips.map((metric) => (
-                  <MetricPill key={`${id}-${metric.label}`} label={metric.label} value={metric.value} />
+                  <MetricPill
+                    key={`${id}-${metric.label}`}
+                    label={metric.label}
+                    value={metric.value}
+                  />
                 ))}
               </div>
             </div>
           )}
 
           <div className="space-y-1 rounded-xl border border-ui-border bg-white/80 p-3 text-xs text-ui-text/90">
-            <p className="font-semibold uppercase tracking-wide text-ui-subtext">After-action notes</p>
-            <p>
-              <span className="font-semibold">Worked:</span> {afterAction.worked}
+            <p className="font-semibold uppercase tracking-wide text-ui-subtext">
+              After-action notes
             </p>
             <p>
-              <span className="font-semibold">Improve:</span> {afterAction.improve}
+              <span className="font-semibold">Worked:</span>{" "}
+              {afterAction.worked}
+            </p>
+            <p>
+              <span className="font-semibold">Improve:</span>{" "}
+              {afterAction.improve}
             </p>
             <p>
               <span className="font-semibold">Actions:</span> {mediumActions}
@@ -692,7 +900,8 @@ function CompactHistoryCard({
 
           {notes && (
             <div className="rounded-xl bg-ui-background px-3 py-2 text-xs text-ui-text/90">
-              <span className="font-semibold text-ui-text">Command note:</span> {notes}
+              <span className="font-semibold text-ui-text">Command note:</span>{" "}
+              {notes}
             </div>
           )}
 
@@ -703,7 +912,10 @@ function CompactHistoryCard({
               </div>
               <div className="flex flex-wrap gap-2 text-brand-primary">
                 {mediaItems.map((item) => (
-                  <span key={item} className="rounded-full bg-brand-primary/10 px-3 py-1">
+                  <span
+                    key={item}
+                    className="rounded-full bg-brand-primary/10 px-3 py-1"
+                  >
                     {item}
                   </span>
                 ))}
@@ -741,7 +953,9 @@ function CompactHistoryCard({
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onViewIncident();
+                      if (onViewIncident) {
+                        onViewIncident();
+                      }
                     }}
                     className="rounded-lg border border-ui-border px-3 py-2 text-sm font-semibold text-ui-text"
                   >
@@ -753,7 +967,10 @@ function CompactHistoryCard({
             {quickNotes.length > 0 && (
               <ul className="space-y-2 text-sm text-ui-text/90">
                 {quickNotes.map((note, index) => (
-                  <li key={`${id}-note-${index}`} className="rounded-lg bg-white px-3 py-2 shadow-sm">
+                  <li
+                    key={`${id}-note-${index}`}
+                    className="rounded-lg bg-white px-3 py-2 shadow-sm"
+                  >
                     {note}
                   </li>
                 ))}
@@ -771,7 +988,9 @@ function InfoTile({ icon: Icon, label, value }) {
     <div className="flex items-start gap-2 rounded-xl border border-ui-border bg-ui-background p-3 text-sm">
       <Icon className="mt-0.5 h-4 w-4 text-brand-primary" />
       <div>
-        <p className="text-xs uppercase tracking-wide text-ui-subtext">{label}</p>
+        <p className="text-xs uppercase tracking-wide text-ui-subtext">
+          {label}
+        </p>
         <p className="font-semibold text-ui-text">{value}</p>
       </div>
     </div>
@@ -801,3 +1020,164 @@ function DetailChip({ icon: Icon, label, toneClass, dense = false }) {
   );
 }
 
+function HistoryDetailModal({ record, onClose }) {
+  if (!record) return null;
+  const severityChip = getChipClasses(severityStyles, record.severity);
+  const outcomeChip = getChipClasses(outcomeStyles, record.outcome);
+  const riskChip = record.riskBand
+    ? getChipClasses(riskBandStyles, record.riskBand)
+    : null;
+  const hazardDisplay = formatPercent(record.aiHazardScore);
+  const citizenDisplay = numberOrDash(record.citizenReports);
+  const closedStamp = formatFullTimestamp(record.date);
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-ui-surface p-5 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="flex items-start justify-between gap-3 border-b border-ui-border pb-4">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+              <span className={`rounded-full px-3 py-1 ${severityChip}`}>
+                {record.severity ?? "Unknown"}
+              </span>
+              <span className={`rounded-full px-3 py-1 ${outcomeChip}`}>
+                {record.outcome ?? "Outcome"}
+              </span>
+              {riskChip && (
+                <span className={`rounded-full px-3 py-1 ${riskChip}`}>
+                  {record.riskBand}
+                </span>
+              )}
+            </div>
+            <h2 className="text-xl font-semibold text-ui-text">
+              {record.type ?? "Incident"} ·{" "}
+              {record.barangay ?? "Unknown location"}
+            </h2>
+            <p className="text-xs text-ui-subtext">{closedStamp}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-full bg-ui-background p-2 text-ui-subtext transition hover:text-ui-text"
+            aria-label="Close history detail"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </header>
+
+        <section className="space-y-4 pt-4 text-sm text-ui-text/90">
+          <div className="rounded-2xl border border-ui-border bg-white p-4">
+            <p className="text-xs uppercase tracking-wide text-ui-subtext">
+              AI summary
+            </p>
+            <p className="mt-2 leading-relaxed">
+              {record.aiSummary ?? "AI summary not recorded for this incident."}
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <InfoTile icon={Activity} label="AI hazard" value={hazardDisplay} />
+            <InfoTile
+              icon={Radio}
+              label="Citizen reports"
+              value={citizenDisplay}
+            />
+            <InfoTile
+              icon={Users}
+              label="Lead responder"
+              value={record.assignedResponder ?? "Unassigned"}
+            />
+            <InfoTile
+              icon={Clock}
+              label="Decision logged"
+              value={closedStamp}
+            />
+          </div>
+
+          {record.metrics && (
+            <div className="space-y-2 rounded-2xl border border-ui-border bg-ui-background p-4">
+              <p className="text-xs uppercase tracking-wide text-ui-subtext">
+                Timing insights
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {Number.isFinite(record.metrics?.dispatchMinutes) && (
+                  <MetricPill
+                    label="Dispatch"
+                    value={`${record.metrics.dispatchMinutes} min`}
+                  />
+                )}
+                {Number.isFinite(record.metrics?.onSceneMinutes) && (
+                  <MetricPill
+                    label="On scene"
+                    value={`${record.metrics.onSceneMinutes} min`}
+                  />
+                )}
+                {Number.isFinite(record.metrics?.resolutionMinutes) && (
+                  <MetricPill
+                    label="Resolution"
+                    value={`${record.metrics.resolutionMinutes} min`}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {record.aar && (
+            <div className="space-y-2 rounded-2xl border border-ui-border bg-white p-4">
+              <p className="text-xs uppercase tracking-wide text-ui-subtext">
+                After-action notes
+              </p>
+              <p>
+                <span className="font-semibold">Worked:</span>{" "}
+                {record.aar.worked ?? "Not captured."}
+              </p>
+              <p>
+                <span className="font-semibold">Improve:</span>{" "}
+                {record.aar.improve ?? "Not captured."}
+              </p>
+              <p>
+                <span className="font-semibold">Actions:</span>{" "}
+                {Array.isArray(record.aar.actions) && record.aar.actions.length
+                  ? record.aar.actions.join(", ")
+                  : "No follow-up actions logged."}
+              </p>
+            </div>
+          )}
+
+          {Array.isArray(record.supportUnits) &&
+            record.supportUnits.length > 0 && (
+              <div className="space-y-2 rounded-2xl border border-ui-border bg-ui-background p-4">
+                <p className="text-xs uppercase tracking-wide text-ui-subtext">
+                  Support units
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {record.supportUnits.map((unit) => (
+                    <span
+                      key={`${record.id}-unit-${unit}`}
+                      className="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-ui-text"
+                    >
+                      {unit}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          {record.notes && (
+            <div className="rounded-2xl border border-ui-border bg-ui-background p-4 text-sm">
+              <p className="text-xs uppercase tracking-wide text-ui-subtext">
+                Command note
+              </p>
+              <p className="mt-2 text-ui-text/90">{record.notes}</p>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}

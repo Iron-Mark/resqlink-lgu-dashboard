@@ -1,4 +1,4 @@
-﻿import {
+import {
   createContext,
   useCallback,
   useContext,
@@ -556,8 +556,8 @@ const initialHistory = [
     date: "2025-09-20T08:45:00Z",
     barangay: "Brgy. Malanday",
     assignedResponder: "Miguel Santos",
-    peopleAssisted: 48,
-    citizenReports: 23,
+    peopleAssisted: 22,
+    citizenReports: 1,
     aiHazardScore: 0.87,
     riskBand: "Red",
     metrics: {
@@ -565,20 +565,16 @@ const initialHistory = [
       onSceneMinutes: 11,
       resolutionMinutes: 54,
     },
-    supportUnits: ["Rescue Boat Delta", "Barangay Volunteers"],
-    media: ["river-rising.jpg", "evac-route.mp4"],
+    supportUnits: ["Rescue Boat Delta"],
+    media: ["river-rising.jpg"],
     aiSummary:
-      "Swift evacuation executed before waters breached first-floor homes. Temporary shelter established at Barangay Gym within 20 minutes.",
+      "Barangay resident Aurora Dela Cruz reported flood waters rising past knee level; boats dispatched immediately.",
     aar: {
-      worked:
-        "Advance warning from sensors allowed pre-positioning of rescue boats.",
-      improve: "Need higher-wattage lighting for night operations.",
-      actions: [
-        "Coordinate with engineering for drainage clearing",
-        "Replenish PPE stock",
-      ],
+      worked: "Caller provided exact block numbers.",
+      improve: "Offer reassurance scripts for elderly callers.",
+      actions: ["Coordinate levee inspection", "Issue barangay SMS alert"],
     },
-    notes: "Night ops coordination successful with barangay volunteers.",
+    notes: "Report logged by Aurora Dela Cruz (Barangay Watch).",
   },
   {
     id: "INC-162",
@@ -590,8 +586,8 @@ const initialHistory = [
     date: "2025-09-18T19:12:00Z",
     barangay: "Brgy. Concepcion",
     assignedResponder: "Leah Ramirez",
-    peopleAssisted: 12,
-    citizenReports: 9,
+    peopleAssisted: 4,
+    citizenReports: 1,
     aiHazardScore: 0.65,
     riskBand: "Amber",
     metrics: {
@@ -599,17 +595,16 @@ const initialHistory = [
       onSceneMinutes: 8,
       resolutionMinutes: 37,
     },
-    supportUnits: ["BFP Ladder 4", "Volunteer Bucket Brigade"],
+    supportUnits: ["BFP Ladder 4"],
     media: ["warehouse-fire.jpg"],
     aiSummary:
-      "Localized warehouse fire isolated to eastern bay. Foam deployment prevented spread to adjacent LPG storage.",
+      "Night shift guard Joel Villanueva reported smoke in paint storage; foam deployment prevented spread.",
     aar: {
-      worked:
-        "Rapid hydrant connection and clear division of interior vs. exterior teams.",
-      improve: "Update mutual-aid call list for after-hours shifts.",
+      worked: "Guard isolated electrical mains before calling.",
+      improve: "Refresh hazardous inventory sheets quarterly.",
       actions: ["Audit hydrant pressure quarterly"],
     },
-    notes: "Handled with mutual-aid standby only.",
+    notes: "Report logged by Joel Villanueva (warehouse guard).",
   },
   {
     id: "INC-151",
@@ -621,8 +616,8 @@ const initialHistory = [
     date: "2025-09-15T11:05:00Z",
     barangay: "Brgy. San Roque",
     assignedResponder: "Paolo Fernandez",
-    peopleAssisted: 6,
-    citizenReports: 5,
+    peopleAssisted: 1,
+    citizenReports: 1,
     aiHazardScore: 0.32,
     riskBand: "Blue",
     metrics: {
@@ -633,13 +628,13 @@ const initialHistory = [
     supportUnits: ["EMS Alpha"],
     media: [],
     aiSummary:
-      "Heat exhaustion cluster at construction site. IV rehydration administered on-site, no transport required.",
+      "Construction foreman Ramon Santos reported a worker collapsing from heat; stabilized on-site.",
     aar: {
-      worked: "Quick triage table set up by EMS lead.",
-      improve: "Need portable canopy for shade.",
+      worked: "Foreman tracked hydration history during the call.",
+      improve: "Advise noon shade breaks for crew.",
       actions: ["Procure compact canopy"],
     },
-    notes: "Forward triage best practice documented.",
+    notes: "Report logged by Ramon Santos (site foreman).",
   },
   {
     id: "INC-144",
@@ -651,8 +646,8 @@ const initialHistory = [
     date: "2025-09-14T16:25:00Z",
     barangay: "Brgy. Sto. Nino",
     assignedResponder: "Paolo Fernandez",
-    peopleAssisted: 9,
-    citizenReports: 8,
+    peopleAssisted: 3,
+    citizenReports: 1,
     aiHazardScore: 0.41,
     riskBand: "Blue",
     metrics: {
@@ -660,16 +655,16 @@ const initialHistory = [
       onSceneMinutes: 9,
       resolutionMinutes: 28,
     },
-    supportUnits: ["Traffic Sector 3", "Tow Crew Bravo"],
+    supportUnits: ["Traffic Sector 3"],
     media: ["cleared-lane.jpg"],
     aiSummary:
-      "Multi-vehicle collision cleared within half an hour; traffic flow normalised after coordinated towing.",
+      "Tricycle driver Mario Villador reported a three-motorbike collision; responders cleared within 30 minutes.",
     aar: {
-      worked: "Joint traffic-police channel kept intersections open.",
-      improve: "Include barangay marshals earlier for crowd control.",
+      worked: "Caller relayed vehicle positions.",
+      improve: "Remind public to capture plate numbers when safe.",
       actions: ["Refresh road-closure playbook"],
     },
-    notes: "Recommended reflective cones for night deployments.",
+    notes: "Report logged by Mario Villador (tricycle driver).",
   },
   {
     id: "INC-138",
@@ -681,8 +676,8 @@ const initialHistory = [
     date: "2025-09-12T03:18:00Z",
     barangay: "Brgy. Bagong Silang",
     assignedResponder: "Noel Garcia",
-    peopleAssisted: 21,
-    citizenReports: 17,
+    peopleAssisted: 0,
+    citizenReports: 1,
     aiHazardScore: 0.56,
     riskBand: "Amber",
     metrics: {
@@ -690,16 +685,16 @@ const initialHistory = [
       onSceneMinutes: 18,
       resolutionMinutes: 42,
     },
-    supportUnits: ["MERALCO Crew 7", "Barangay Tanong"],
+    supportUnits: ["MERALCO Crew 7"],
     media: ["restored-feed.jpg"],
     aiSummary:
-      "Isolated feeder trip rerouted; backup gensets sustained clinic operations while linemen swapped the damaged fuse block.",
+      "Clinic nurse Patricia Magno reported feeder loss affecting vaccines; generator engaged before crews arrived.",
     aar: {
-      worked: "Rapid switch to contingency power for health facilities.",
-      improve: "Stock additional portable lights for cordoning.",
+      worked: "Nurse listed exact cold-chain load.",
+      improve: "Label generator switches clearly.",
       actions: ["Coordinate with utility for spare parts cache"],
     },
-    notes: "Pre-positioned generator prevented cold-chain spoilage.",
+    notes: "Report logged by Nurse Patricia Magno (health center).",
   },
   {
     id: "INC-133",
@@ -712,7 +707,7 @@ const initialHistory = [
     barangay: "Brgy. Ibaba",
     assignedResponder: "Amina Cruz",
     peopleAssisted: 0,
-    citizenReports: 6,
+    citizenReports: 1,
     aiHazardScore: 0.64,
     riskBand: "Amber",
     metrics: {
@@ -723,13 +718,13 @@ const initialHistory = [
     supportUnits: ["GeoTech Scout Team"],
     media: ["stabilised-slope.jpg"],
     aiSummary:
-      "Slope sensors stabilised after rainfall subsided; no active debris flow observed by geotech scouts.",
+      "Resident Alicia Domingo reported rumbling; scouts later confirmed slope stability.",
     aar: {
-      worked: "Quick validation with drone imagery avoided unnecessary evacuations.",
-      improve: "Need clearer trigger thresholds for re-opening roads.",
+      worked: "Caller provided live video of hillside.",
+      improve: "Share reminders on reporting loose soil immediately.",
       actions: ["Publish updated slope-trigger matrix"],
     },
-    notes: "Call stood down after confirming no secondary slide.",
+    notes: "Report logged by Alicia Domingo via hotline.",
   },
 ];
 const initialState = {
