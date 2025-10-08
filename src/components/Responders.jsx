@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useMemo } from "react";
 import { XCircleIcon } from "@heroicons/react/24/outline";
-import { UserIcon, UserGroupIcon } from "@heroicons/react/24/solid";
+import { UserIcon, UserGroupIcon, CheckIcon } from "@heroicons/react/24/solid";
 import {
   ChevronDown,
   MapPin,
@@ -186,6 +186,37 @@ const statusChipClass = (status) => {
       return "bg-slate-100 text-ui-subtext";
   }
 };
+
+const STATUS_ACTION_STYLES = {
+  Available: {
+    active: "bg-emerald-50 text-emerald-700",
+    dot: "bg-emerald-500",
+    badge: "bg-emerald-100 text-emerald-700",
+  },
+  "En Route": {
+    active: "bg-amber-50 text-amber-700",
+    dot: "bg-amber-500",
+    badge: "bg-amber-100 text-amber-700",
+  },
+  "On Scene": {
+    active: "bg-amber-50 text-amber-700",
+    dot: "bg-amber-500",
+    badge: "bg-amber-100 text-amber-700",
+  },
+  "Off Duty": {
+    active: "bg-slate-50 text-slate-700",
+    dot: "bg-slate-400",
+    badge: "bg-slate-200 text-slate-700",
+  },
+  default: {
+    active: "bg-slate-50 text-slate-700",
+    dot: "bg-slate-400",
+    badge: "bg-slate-200 text-slate-700",
+  },
+};
+
+const getStatusActionStyle = (status) =>
+  STATUS_ACTION_STYLES[status] ?? STATUS_ACTION_STYLES.default;
 
 const ResponderCard = ({ responder, onSelect, onEdit, editMode }) => {
   const statusColors = {
@@ -390,20 +421,38 @@ const ResponderDetailModal = ({
             <p className="text-xs uppercase tracking-wide text-ui-subtext">
               Change status
             </p>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {["Available", "En Route", "On Scene", "Off Duty"].map(
-                (status) => (
+            <div className="mt-2 overflow-hidden rounded-2xl border border-ui-border bg-ui-background/70 shadow-sm">
+              {["Available", "En Route", "On Scene", "Off Duty"].map((status) => {
+                const isActive = responder.status === status;
+                const { active, dot, badge } = getStatusActionStyle(status);
+
+                return (
                   <button
                     key={status}
-                    onClick={() => handleStatusChange(responder.id, status)}
-                    className={`rounded-lg px-3 py-2 text-xs font-semibold ${statusChipClass(
-                      status
-                    )}`}
+                    onClick={() => onStatusChange?.(responder.id, status)}
+                    className={`flex w-full items-center justify-between gap-3 border-t border-ui-border/60 px-4 py-3 text-sm transition first:border-t-0 ${
+                      isActive ? `${active} font-semibold` : "text-ui-text hover:bg-white"
+                    }`}
                   >
-                    {status}
+                    <span className="flex items-center gap-2">
+                      <span className={`inline-flex h-2.5 w-2.5 rounded-full ${dot}`} />
+                      <span>{status}</span>
+                    </span>
+                    {isActive ? (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge}`}
+                      >
+                        <CheckIcon className="h-3 w-3" />
+                        Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-ui-subtext/80">
+                        Set status
+                      </span>
+                    )}
                   </button>
-                )
-              )}
+                );
+              })}
             </div>
           </div>
 
@@ -643,3 +692,4 @@ function InfoItem({ label, value }) {
     </div>
   );
 }
+
