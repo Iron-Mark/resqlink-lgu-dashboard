@@ -17,6 +17,8 @@ import {
   Timer,
   List as ListIcon,
   Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 const timeframes = [
@@ -115,6 +117,9 @@ export default function ResponseHistory() {
   const [expandedId, setExpandedId] = useState(null);
   const [activeView, setActiveView] = useState("list");
   const [activeRecord, setActiveRecord] = useState(null);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [showIncidentListDialog, setShowIncidentListDialog] = useState(false);
+  const [selectedDayIncidents, setSelectedDayIncidents] = useState([]);
 
   const historySource = useMemo(() => {
     if (!history.length) return [];
@@ -315,6 +320,20 @@ export default function ResponseHistory() {
     setActiveRecord(record);
   };
 
+  const handleDayClick = (dateKey, records) => {
+    if (!records || records.length === 0) return;
+    
+    if (records.length === 1) {
+      // Single incident - open detail directly
+      handleViewRecord(records[0]);
+    } else {
+      // Multiple incidents - show list dialog
+      setSelectedDate(dateKey);
+      setSelectedDayIncidents(records);
+      setShowIncidentListDialog(true);
+    }
+  };
+
   useEffect(() => {
     setExpandedId(null);
   }, [activeView, selectedDate]);
@@ -368,77 +387,168 @@ export default function ResponseHistory() {
       );
     }
 
+    // Generate calendar grid for current month
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    
+    // First day of the month
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    
+    // Get day of week for first day (0 = Sunday)
+    const firstDayOfWeek = firstDay.getDay();
+    
+    // Total days in month
+    const daysInMonth = lastDay.getDate();
+    
+    // Build calendar grid
+    const calendarDays = [];
+    
+    // Add empty cells for days before month starts
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      calendarDays.push(null);
+    }
+    
+    // Add all days in month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const dateKey = date.toISOString().split('T')[0];
+      const dayRecords = groupedByDay.get(dateKey) || [];
+      const summary = daySummaries.get(dateKey);
+      
+      calendarDays.push({
+        date,
+        dateKey,
+        day,
+        records: dayRecords,
+        summary,
+      });
+    }
+    
+    const monthName = currentMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
     return (
-      <section className="rounded-2xl bg-ui-surface p-4 shadow space-y-4">
-        <div className="flex items-center justify-between text-xs text-ui-subtext">
-          <span className="font-semibold uppercase tracking-wide">
-            Calendar view
-          </span>
-          <span>
-            {orderedDays.length} day{orderedDays.length === 1 ? "" : "s"}
-          </span>
+      <section className="rounded-2xl bg-ui-surface p-3 sm:p-5 shadow space-y-4 sm:space-y-5">
+        {/* Month Navigation */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <CalendarIcon className="h-5 w-5 sm:h-6 sm:w-6 text-brand-primary" />
+            <div>
+              <h3 className="text-base sm:text-xl font-bold text-ui-text">{monthName}</h3>
+              <p className="text-[10px] sm:text-xs text-ui-subtext">Click a day to view incidents</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <button
+              onClick={() => setCurrentMonth(new Date(year, month - 1, 1))}
+              className="rounded-lg border border-ui-border bg-white p-2 sm:p-2.5 text-ui-text transition hover:bg-brand-primary hover:text-white hover:border-brand-primary shadow-sm"
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+            </button>
+            <button
+              onClick={() => setCurrentMonth(new Date())}
+              className="hidden sm:flex items-center gap-1.5 rounded-lg border border-brand-primary bg-brand-primary px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-brand-primary/90 shadow-sm"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              Today
+            </button>
+            <button
+              onClick={() => setCurrentMonth(new Date(year, month + 1, 1))}
+              className="rounded-lg border border-ui-border bg-white p-2 sm:p-2.5 text-ui-text transition hover:bg-brand-primary hover:text-white hover:border-brand-primary shadow-sm"
+              aria-label="Next month"
+            >
+              <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
+            </button>
+          </div>
         </div>
-        <div className="-mx-4 overflow-x-auto px-4">
-          <div className="flex snap-x snap-mandatory gap-2 pb-2">
-            {orderedDays.map((day) => {
-              const date = new Date(day);
-              const weekday = date.toLocaleDateString(undefined, {
-                weekday: "short",
-              });
-              const dayNum = date.getDate();
-              const month = date.toLocaleDateString(undefined, {
-                month: "short",
-              });
-              const count = groupedByDay.get(day)?.length ?? 0;
-              const isActive = selectedDate === day;
-              const summary = daySummaries.get(day);
-              const severityAccent = getSeverityAccent(summary?.topSeverity);
-              const hazardDisplay =
-                typeof summary?.averageHazard === "number"
-                  ? `${summary.averageHazard}% avg risk`
-                  : null;
-              const resolvedLabel =
-                summary && typeof summary.resolvedCount === "number"
-                  ? `${summary.resolvedCount} resolved`
-                  : `${count} record${count !== 1 ? "s" : ""}`;
-              const followUpLabel =
-                summary && summary.followUpCount > 0
-                  ? `${summary.followUpCount} follow-up`
-                  : null;
+
+        {/* Calendar Grid */}
+        <div className="overflow-hidden rounded-xl sm:rounded-2xl border border-ui-border bg-gradient-to-b from-white to-gray-50/50 shadow-sm">
+          {/* Week day headers */}
+          <div className="grid grid-cols-7 border-b-2 border-ui-border bg-gradient-to-b from-gray-50 to-white">
+            {weekDays.map((day) => (
+              <div
+                key={day}
+                className="border-r border-ui-border/50 px-2 py-3 sm:py-4 text-center text-[11px] sm:text-sm font-bold uppercase tracking-wider text-ui-subtext last:border-r-0"
+              >
+                <span className="hidden sm:inline">{day}</span>
+                <span className="sm:hidden">{day.slice(0, 1)}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Calendar days grid */}
+          <div className="grid grid-cols-7">
+            {calendarDays.map((dayData, index) => {
+              if (!dayData) {
+                // Empty cell for days before month starts
+                return (
+                  <div
+                    key={`empty-${index}`}
+                    className="aspect-square sm:aspect-auto border-b border-r border-ui-border/30 bg-gray-50/50 last:border-r-0"
+                    style={{ minHeight: '70px' }}
+                  />
+                );
+              }
+
+              const { date, dateKey, day, records, summary } = dayData;
+              const isToday = dateKey === new Date().toISOString().split('T')[0];
+              const hasRecords = records.length > 0;
+              const severityAccent = hasRecords ? getSeverityAccent(summary?.topSeverity) : null;
+
               return (
                 <button
-                  key={day}
-                  onClick={() => setSelectedDate(day)}
-                  className={`min-w-[92px] flex-1 snap-center rounded-2xl border px-2 py-2 text-center transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-primary ${
-                    isActive
-                      ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
-                      : "border-ui-border bg-ui-background text-ui-text"
-                  }`}
+                  key={dateKey}
+                  onClick={() => hasRecords && handleDayClick(dateKey, records)}
+                  disabled={!hasRecords}
+                  className={`group relative aspect-square sm:aspect-auto border-b border-r border-ui-border/30 p-1.5 sm:p-3 text-left transition-all duration-200 last:border-r-0 ${
+                    hasRecords 
+                      ? 'cursor-pointer hover:bg-brand-primary/5 hover:border-brand-primary/30 hover:shadow-sm active:scale-95' 
+                      : 'cursor-default bg-white'
+                  } ${isToday ? 'bg-blue-50/50 ring-1 ring-inset ring-blue-200' : 'bg-white'}`}
+                  style={{ minHeight: '70px' }}
                 >
-                  <div className="text-xs uppercase tracking-wide">
-                    {weekday}
-                  </div>
-                  <div className="text-lg font-semibold">{dayNum}</div>
-                  <div className="text-[10px] text-ui-subtext">{month}</div>
-                  <div className="mt-2 flex items-center justify-center gap-1 text-[10px] font-medium">
+                  {/* Day number */}
+                  <div className="flex items-start justify-between mb-1">
                     <span
-                      className={`h-1.5 w-1.5 rounded-full ${severityAccent.dot}`}
-                    />
-                    <span className={severityAccent.text}>
-                      {summary?.topSeverity ?? "-"}
+                      className={`inline-flex items-center justify-center text-xs sm:text-sm font-semibold transition-all ${
+                        isToday
+                          ? 'h-6 w-6 sm:h-7 sm:w-7 rounded-full bg-brand-primary text-white shadow-md'
+                          : hasRecords
+                          ? 'text-ui-text group-hover:text-brand-primary'
+                          : 'text-ui-subtext/50'
+                      }`}
+                    >
+                      {day}
                     </span>
                   </div>
-                  <div className="mt-1 text-[10px] text-ui-subtext">
-                    {resolvedLabel}
-                  </div>
-                  {followUpLabel && (
-                    <div className="text-[10px] text-ui-subtext">
-                      {followUpLabel}
+
+                  {/* Incident badge - clean and minimal */}
+                  {hasRecords && summary && (
+                    <div className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2">
+                      <div 
+                        className={`relative inline-flex items-center justify-center h-6 w-6 sm:h-8 sm:w-8 rounded-full font-bold text-[10px] sm:text-xs text-white shadow-lg transition-all duration-200 group-hover:scale-110 ${
+                          summary.topSeverity === 'High' ? 'bg-gradient-to-br from-red-500 to-red-600' :
+                          summary.topSeverity === 'Medium' ? 'bg-gradient-to-br from-amber-500 to-amber-600' :
+                          'bg-gradient-to-br from-blue-500 to-blue-600'
+                        }`}
+                      >
+                        {records.length}
+                        {records.length > 1 && (
+                          <div className="absolute -top-0.5 -right-0.5 h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full bg-white border border-gray-200 animate-pulse" />
+                        )}
+                      </div>
                     </div>
                   )}
-                  {hazardDisplay && (
-                    <div className="mt-1 text-[10px] font-semibold text-brand-primary">
-                      {hazardDisplay}
+
+                  {/* Hover tooltip */}
+                  {hasRecords && (
+                    <div className="absolute inset-x-0 bottom-full mb-2 hidden group-hover:block z-10 pointer-events-none">
+                      <div className="bg-gray-900 text-white text-[10px] sm:text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap mx-auto w-fit">
+                        {records.length} incident{records.length !== 1 ? 's' : ''} · {summary?.topSeverity || 'Unknown'}
+                      </div>
                     </div>
                   )}
                 </button>
@@ -447,28 +557,20 @@ export default function ResponseHistory() {
           </div>
         </div>
 
-        <div className="space-y-3">
-          {dayRecords.length > 0 ? (
-            dayRecords.map((record) => (
-              <CompactHistoryCard
-                key={record.id}
-                record={record}
-                expanded={expandedId === record.id}
-                onToggle={() =>
-                  setExpandedId((prev) =>
-                    prev === record.id ? null : record.id
-                  )
-                }
-                quickNotes={quickNotes[record.id] ?? []}
-                onAddNote={(note) => handleAddNote(record.id, note)}
-                onViewIncident={() => handleViewRecord(record)}
-              />
-            ))
-          ) : (
-            <div className="rounded-2xl border border-ui-border bg-ui-background p-4 text-sm text-ui-subtext">
-              Select a day to view detailed reports.
-            </div>
-          )}
+        {/* Legend */}
+        <div className="flex items-center justify-center gap-4 sm:gap-6 text-xs text-ui-subtext">
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded-full bg-gradient-to-br from-red-500 to-red-600 shadow-sm" />
+            <span>High</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded-full bg-gradient-to-br from-amber-500 to-amber-600 shadow-sm" />
+            <span>Medium</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 shadow-sm" />
+            <span>Low</span>
+          </div>
         </div>
       </section>
     );
@@ -586,6 +688,23 @@ export default function ResponseHistory() {
         {activeView === "list" ? renderListView() : renderCalendarView()}
       </div>
 
+      {/* Incident List Dialog for multiple incidents */}
+      {showIncidentListDialog && (
+        <IncidentListDialog
+          date={selectedDate}
+          incidents={selectedDayIncidents}
+          onClose={() => {
+            setShowIncidentListDialog(false);
+            setSelectedDayIncidents([]);
+          }}
+          onSelectIncident={(record) => {
+            setShowIncidentListDialog(false);
+            handleViewRecord(record);
+          }}
+        />
+      )}
+
+      {/* Single Incident Detail Dialog */}
       {activeRecord && (
         <HistoryDetailModal
           record={activeRecord}
@@ -1177,6 +1296,121 @@ function HistoryDetailModal({ record, onClose }) {
             </div>
           )}
         </section>
+      </div>
+    </div>
+  );
+}
+
+function IncidentListDialog({ date, incidents, onClose, onSelectIncident }) {
+  if (!incidents || incidents.length === 0) return null;
+
+  const formattedDate = new Date(date).toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl animate-in slide-in-from-bottom-4 duration-300"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {/* Header */}
+        <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-ui-border bg-gradient-to-b from-white to-gray-50/50 p-5 backdrop-blur-sm">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-brand-primary" />
+              <h2 className="text-lg font-bold text-ui-text">{formattedDate}</h2>
+            </div>
+            <p className="text-sm text-ui-subtext">
+              {incidents.length} incident{incidents.length !== 1 ? 's' : ''} reported
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-full bg-ui-background p-2 text-ui-subtext transition hover:bg-ui-border hover:text-ui-text"
+            aria-label="Close incident list"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </header>
+
+        {/* Incident List */}
+        <div className="overflow-y-auto p-4" style={{ maxHeight: 'calc(85vh - 100px)' }}>
+          <div className="space-y-3">
+            {incidents.map((incident) => {
+              const severityClasses = getChipClasses(severityStyles, incident.severity);
+              const outcomeClasses = getChipClasses(outcomeStyles, incident.outcome);
+              const timeLabel = formatTimeLabel(incident.date);
+              
+              return (
+                <button
+                  key={incident.id}
+                  onClick={() => onSelectIncident(incident)}
+                  className="group w-full rounded-2xl border border-ui-border bg-white p-4 text-left shadow-sm transition-all hover:border-brand-primary hover:shadow-md active:scale-[0.98]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 space-y-2">
+                      {/* Incident ID and badges */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-brand-primary">
+                          {incident.id}
+                        </span>
+                        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${severityClasses}`}>
+                          {incident.severity}
+                        </span>
+                        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${outcomeClasses}`}>
+                          {incident.outcome}
+                        </span>
+                      </div>
+
+                      {/* Type and Location */}
+                      <div className="flex items-center gap-2 text-sm">
+                        <Activity className="h-4 w-4 text-ui-subtext" />
+                        <span className="font-semibold text-ui-text">{incident.type}</span>
+                        <span className="text-ui-subtext">·</span>
+                        <MapPin className="h-3.5 w-3.5 text-ui-subtext" />
+                        <span className="text-ui-subtext">{incident.barangay}</span>
+                      </div>
+
+                      {/* AI Summary */}
+                      <p className="line-clamp-2 text-sm text-ui-text/80">
+                        {incident.aiSummary ?? "No summary available."}
+                      </p>
+
+                      {/* Time and Responder */}
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-ui-subtext">
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" />
+                          {timeLabel}
+                        </span>
+                        {incident.assignedResponder && (
+                          <>
+                            <span>·</span>
+                            <span className="inline-flex items-center gap-1">
+                              <Users className="h-3.5 w-3.5" />
+                              {incident.assignedResponder}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Arrow indicator */}
+                    <div className="flex items-center">
+                      <ChevronRight className="h-5 w-5 text-ui-subtext transition-transform group-hover:translate-x-1 group-hover:text-brand-primary" />
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
